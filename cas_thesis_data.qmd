@@ -3,25 +3,237 @@ title: "CAS thesis data"
 author: "DaaniiH"
 format: html
 editor: visual
+editor_options: 
+  chunk_output_type: console
 ---
 
-## Quarto
+## Libraries
 
 Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
 
-## Running Code
-
-When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
-
 ```{r}
-1 + 1
+
+library(readr)
+library(readxl)
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+
 ```
 
-You can add options to executable code like this
+## Initial data load
 
 ```{r}
-#| echo: false
-2 * 2
+
+# Voting
+
+voting_raw <- read_delim("~/CAS/Zertifikatsarbeit/data/votes/abstimmungen_swissvotes_DATASET CSV 09-02-2025.csv",
+                     delim = ";",
+                     escape_double = FALSE,
+                     trim_ws = TRUE,
+                     show_col_types = FALSE)
+
+
+# Election
+
+
+# Parties
+
+parties_rating <- read_excel("~/CAS/Zertifikatsarbeit/data/parties_economic_socio-political_rating.xlsx",
+                             sheet = "matrix_eco-socio")
+
+
+```
+
+### Lookup tables
+
+Parteinamen
+
+```{r}
+
+parteinamen <- data.frame(
+  kuerzel = c(
+    "fdp", "sps", "svp", "mitte", "evp", "gps", "glp", "ucsp", "pda", "sd", "edu", "fps", "lega", "kvp",
+    "mcg", "cvp", "bdp", "lps", "ldu", "poch", "rep", "eco", "sgv", "sbv", "sgb", "travs", "sav", "vsa",
+    "vpod", "voev", "tcs", "vcs", "acs", "sbk", "ssv", "gem", "kdk", "kkjpd", "gdk", "ldk"
+  ),
+  name = c(
+    "Freisinnig-demokratische Partei (FDP.Die Liberalen)",
+    "Sozialdemokratische Partei",
+    "Schweizerische Volkspartei (bis 1936 Parolen der BGB Bern)",
+    "Die Mitte",
+    "Evangelische Volkspartei",
+    "Grüne Partei der Schweiz",
+    "Grünliberale Partei",
+    "Christlichsoziale Partei der Schweiz (von der CVP unabhängige CSP)",
+    "Partei der Arbeit",
+    "Schweizer Demokraten",
+    "Eidgenössisch-Demokratische Union",
+    "Autopartei",
+    "Lega dei Ticinesi",
+    "Katholische Volkspartei",
+    "Mouvement Citoyens Genevois",
+    "Christlichdemokratische Volkspartei",
+    "Bürgerlich-Demokratische Partei",
+    "Liberale Partei der Schweiz",
+    "Landesring der Unabhängigen",
+    "Progressive Organisationen der Schweiz",
+    "Schweizerische Republikanische Bewegung",
+    "Economiesuisse (bis 15.9.2000: Schweizerischer Handels- und Industrieverein SHIV (Vorort))",
+    "Schweizerischer Gewerbeverband",
+    "Schweizer Bauernverband",
+    "Schweizerischer Gewerkschaftsbund",
+    "Travail.Suisse (bis 2002: Parolen des Christlichnationalen Gewerkschaftsbunds (CNG); dieser fusionierte per 1.1.2003 mit der VSA zu Travail.Suisse)",
+    "Schweizerischer Arbeitgeberverband (bis 1996: Zentralverband Schweizerischer Arbeitgeber-Organisationen ZSAO)",
+    "Vereinigung schweizerischer Angestelltenverbände",
+    "Verband des Personals öffentlicher Dienste",
+    "Verband öffentlicher Verkehr",
+    "Touring Club Schweiz",
+    "Verkehrs-Club der Schweiz",
+    "Automobil Club der Schweiz",
+    "Schweizer Bischofskonferenz",
+    "Schweizerischer Städteverband",
+    "Schweizerischer Gemeindeverband",
+    "Konferenz der Kantonsregierungen",
+    "Konferenz der kantonalen Justiz- und Polizeidirektoren",
+    "Schweizerische Gesundheitsdirektorenkonferenz",
+    "Konferenz der kantonalen Landwirtschaftsdirektoren"
+  ),
+  stringsAsFactors = FALSE
+)
+
+# Neue Spalte mit "p-" Präfix
+parteinamen$p_kuerzel <- paste0("p-", parteinamen$kuerzel)
+
+# Spaltenreihenfolge anpassen: p_kuerzel, kuerzel, name
+parteinamen <- parteinamen[, c("p_kuerzel", "kuerzel", "name")]
+```
+
+## Transformation & visualization
+
+```{r}
+
+
+voting <- voting_raw %>%
+  mutate(datum = as.Date(datum, format = "%d.%m.%Y")) %>%  # Format-Umwandlung
+  filter(datum >= as.Date("2019-12-31")) %>%               # Vergleich
+  select(anr,                                              # Spalten-Wahl
+         datum,
+         titel_kurz_d,
+         titel_off_d,
+         rechtsform, #1 Obligatorisches Referendum
+                     #2 Fakultatives Referendum
+                     #3 Volksinitiative
+                     #4 Direkter Gegenentwurf zu einer Volksinitiative
+                     #5 Stichfrage
+         dep,
+         `br-pos`,   #1 Befürwortend
+                     #2 Ablehnend
+                     #3 Keine
+                     #8 Vorzug für den Gegenentwurf (bei Stichfragen)
+                     #9 Vorzug für die Volksinitiative (bei Stichfragen)
+                     #. Missing
+         legisjahr,
+         `pa-iv`,
+         `bv-pos`,   #1 Befürwortend
+                     #2 Ablehnend
+                     #3 Keine Abstimmungsempfehlung des Parlaments
+                     #8 Vorzug für den Gegenentwurf (bei Stichfragen)
+         `nr-pos`,   #1 Befürwortende Mehrheit im Nationalrat
+                     #2 Ablehnende Mehrheit im Nationalrat
+                     #3 Keine Abstimmungsempfehlung des Nationalrats
+                     #8 Vorzug für den Gegenentwurf (bei Stichfragen)
+         nrja,
+         nrnein,
+         `sr-pos`,   #1 Befürwortende Mehrheit im Ständerat
+                     #2 Ablehnende Mehrheit im Ständerat
+                     #3 Keine Abstimmungsempfehlung des Ständerats
+                     #8 Vorzug für den Gegenentwurf (bei Stichfragen)
+         srja,
+         srnein,
+         starts_with("p-"),
+                     #1 Ja-Parole
+                     #2 Nein-Parole
+                     #3 keine Parole abzugeben
+                     #4 empfahl, einen leeren Stimmzettel einzulegen
+                     #5 Stimmfreigabe
+                     #8 Bevorzugung des Gegenentwurfs (bei Stichfrage)
+                     #9 Bevorzugung der Volksinitiative (bei Stichfrage)
+                     #66 Neutral: keine Parole oder Empfehlung auf leer einlegen                        #9999 Organisation existiert nicht
+                     #. Unbekannt
+         volk,       #0 Eine Mehrheit der Abstimmenden hat die Vorlage abgelehnt
+                     #1 Eine Mehrheit der Abstimmenden hat die Vorlage ange-nommen
+                     #8 Bei Stichfragen:  Mehrheit für Gegenentwurfs
+                     #9 Bei Stichfragen:  Mehrheit Volksinitiative
+         stand,
+                     #0 Die Vorlage hat keine Mehrheit der Standesstimmen er-reicht
+                     #1 Die Vorlage hat die Mehrheit der Standesstimmen erreicht
+                     #3 Ständemehr nicht notwendig
+                     #8 Bei Stichfragen: Mehrheit für Gegenentwurf
+                     #9 Bei Stichfragen: Mehrheit für Volksinitiative
+         annahme,    #0 Ablehnung der Vorlage
+                     #1 Annahme der Vorlage
+                     #8 Bei Stichfragen: Gegenentwurf angenommen
+                     #9 Bei Stichfragen: Volksinitiative angenommen
+                     #. Bei Stichfragen: Ergebnis der Stichfrage obsolet
+         berecht,
+         stimmen,
+         bet,
+         leer,
+         ungultig,
+         gultig,
+         volkja,
+         volknein,
+         `volkja-proz`
+         
+  )
 ```
 
 The `echo: false` option disables the printing of code (only output is displayed).
+
+### Parties: Multi-Dimensional-Model
+
+```{r}
+
+str(parties_rating)
+
+ggplot(parties_rating,
+       aes(x = eco_pct_x,
+           y = socio_pct_y,
+           label = Partei)) +
+  geom_point(size = 3) +
+  geom_text(vjust = -0.8) +
+  #geom_vline(xintercept = 50, linetype = "dashed", color = "blue") +
+  #geom_hline(yintercept = 50, linetype = "dashed",color = "blue") +
+  geom_segment(aes(x = 50, xend = 50,
+                   y = 0, yend = 100), linetype = "dashed", color = "blue") +
+  geom_segment(aes(x = 0, xend = 100,
+                   y = 50, yend = 50), linetype = "dashed", color = "blue") +
+  
+  annotate("text",
+           x = 0,
+           y = min(parties_rating$socio_pct_y) + 55,
+           label = "Links", size = 4, hjust = 0.5) +
+  annotate("text",
+           x = 100,
+           y = min(parties_rating$socio_pct_y) + 55,
+           label = "Rechts", size = 4, hjust = 0.5) +
+  annotate("text",
+           x = 50,
+           y = min(parties_rating$socio_pct_y) - 3,
+           label = "Autoritär/Konservativ", size = 4, hjust = 0.5) +
+  annotate("text",
+           x = 50,
+           y = min(parties_rating$socio_pct_y) + 103,
+           label = "Libertär/Progressiv", size = 4, hjust = 0.5) +
+  scale_x_continuous(limits = c(0, 100)) +
+  labs(x = "Wirtschaftspolitisch",
+     y = "Gesellschaftspolitisch",
+     title = "abc") +
+  theme_minimal()+
+  theme(
+    axis.title.x = element_text(margin = margin(t = 30)),
+    axis.title.y = element_text(margin = margin(r = 30))) +
+  coord_cartesian(ylim = c(0, 100), clip = "off")
+
+```
