@@ -18,6 +18,7 @@ library(readxl)
 library(dplyr)
 library(tidyverse)
 library(ggplot2)
+library(ggforce)
 
 ```
 
@@ -40,7 +41,7 @@ voting_raw <- read_delim("~/CAS/Zertifikatsarbeit/data/votes/abstimmungen_swissv
 # Parties
 
 parties_rating <- read_excel("~/CAS/Zertifikatsarbeit/data/parties_economic_socio-political_rating.xlsx",
-                             sheet = "matrix_eco-socio")
+                             sheet = "matrix_eco-socio_enhanced")
 
 
 ```
@@ -50,6 +51,8 @@ parties_rating <- read_excel("~/CAS/Zertifikatsarbeit/data/parties_economic_soci
 Parteinamen
 
 ```{r}
+
+
 
 parteinamen <- data.frame(
   kuerzel = c(
@@ -113,6 +116,8 @@ parteinamen <- parteinamen[, c("p_kuerzel", "kuerzel", "name")]
 
 ```{r}
 
+grep("^p-", names(voting), value = TRUE)
+paste(grep("^p-", names(voting), value = TRUE), collapse = ", ")
 
 voting <- voting_raw %>%
   mutate(datum = as.Date(datum, format = "%d.%m.%Y")) %>%  # Format-Umwandlung
@@ -193,18 +198,18 @@ The `echo: false` option disables the printing of code (only output is displayed
 
 ### Parties: Multi-Dimensional-Model
 
+Minimum values
+
 ```{r}
 
 str(parties_rating)
 
 ggplot(parties_rating,
-       aes(x = eco_pct_x,
-           y = socio_pct_y,
+       aes(x = eco_pct_min_x,
+           y = socio_pct_min_y,
            label = Partei)) +
   geom_point(size = 3) +
   geom_text(vjust = -0.8) +
-  #geom_vline(xintercept = 50, linetype = "dashed", color = "blue") +
-  #geom_hline(yintercept = 50, linetype = "dashed",color = "blue") +
   geom_segment(aes(x = 50, xend = 50,
                    y = 0, yend = 100), linetype = "dashed", color = "blue") +
   geom_segment(aes(x = 0, xend = 100,
@@ -212,24 +217,80 @@ ggplot(parties_rating,
   
   annotate("text",
            x = 0,
-           y = min(parties_rating$socio_pct_y) + 55,
-           label = "Links", size = 4, hjust = 0.5) +
+           y = min(parties_rating$socio_pct_min_y) + 55,
+           label = "Links/staatsgläubig", size = 4, hjust = 0.5) +
   annotate("text",
            x = 100,
-           y = min(parties_rating$socio_pct_y) + 55,
-           label = "Rechts", size = 4, hjust = 0.5) +
+           y = min(parties_rating$socio_pct_min_y) + 55,
+           label = "Rechts/marktwirtschaftlich", size = 4, hjust = 0.5) +
   annotate("text",
            x = 50,
-           y = min(parties_rating$socio_pct_y) - 3,
+           y = min(parties_rating$socio_pct_min_y) - 3,
            label = "Autoritär/Konservativ", size = 4, hjust = 0.5) +
   annotate("text",
            x = 50,
-           y = min(parties_rating$socio_pct_y) + 103,
+           y = min(parties_rating$socio_pct_min_y) + 103,
            label = "Libertär/Progressiv", size = 4, hjust = 0.5) +
   scale_x_continuous(limits = c(0, 100)) +
   labs(x = "Wirtschaftspolitisch",
        y = "Gesellschaftspolitisch",
-       title = "Politische Positionierung im Zwei-Achsen-Modell") +
+       title = "Politische Positionierung im Zwei-Achsen-Modell",
+       subtitle = "Grundlage: Minimalwerte des Abstimmungsverhaltens") +
+  theme_minimal()+
+  theme(plot.title = element_text(size = 18,
+                                  margin = margin(b = 30)),
+        axis.title.x = element_text(size = 14,
+                                    margin = margin(t = 5)),
+        axis.title.y = element_text(size = 14,
+                                    margin = margin(r = 5))) +
+  coord_cartesian(ylim = c(0, 105),
+                  xlim = c(0, 105),
+                  clip = "off")
+
+```
+
+Average values and min/max as eclipse
+
+```{r}
+
+ggplot(parties_rating,
+       aes(x = eco_pct_avg_x,
+           y = socio_pct_avg_y,
+           label = Partei)) +
+  geom_ellipse(
+    aes(x0 = eco_pct_avg_x,
+        y0 = socio_pct_avg_y,
+        a = (eco_pct_max_x - eco_pct_min_x) / 2, # Halbachse x
+        b = (socio_pct_max_y - socio_pct_min_y) / 2, # Halbachse y
+        angle = 0),
+    fill = "gray80", alpha = 0.4) +
+  geom_point(size = 3) +
+  geom_text(vjust = -0.8) +
+  geom_segment(aes(x = 50, xend = 50,
+                   y = 0, yend = 100), linetype = "dashed", color = "blue") +
+  geom_segment(aes(x = 0, xend = 100,
+                   y = 50, yend = 50), linetype = "dashed", color = "blue") +
+  annotate("text",
+           x = 0,
+           y = min(parties_rating$socio_pct_min_y) + 55,
+           label = "Links/staatsgläubig", size = 4, hjust = 0.5) +
+  annotate("text",
+           x = 100,
+           y = min(parties_rating$socio_pct_min_y) + 55,
+           label = "Rechts/marktwirtschaftlich", size = 4, hjust = 0.5) +
+  annotate("text",
+           x = 50,
+           y = min(parties_rating$socio_pct_min_y) - 3,
+           label = "Autoritär/Konservativ", size = 4, hjust = 0.5) +
+  annotate("text",
+           x = 50,
+           y = min(parties_rating$socio_pct_min_y) + 103,
+           label = "Libertär/Progressiv", size = 4, hjust = 0.5) +
+  scale_x_continuous(limits = c(-10, +110)) +
+  labs(x = "Wirtschaftspolitisch",
+       y = "Gesellschaftspolitisch",
+       title = "Politische Positionierung im Zwei-Achsen-Modell",
+       subtitle = "Grundlage: Durchschnitt des Abstimmungsverhaltens als Zentrum, Min-/Max als Ellipse") +
   theme_minimal()+
   theme(plot.title = element_text(size = 18,
                                   margin = margin(b = 30)),
@@ -238,6 +299,154 @@ ggplot(parties_rating,
         axis.title.y = element_text(size = 14,
                                     margin = margin(r = 5))) +
   coord_cartesian(ylim = c(0, 100),
+                  xlim = c(0, 100),
                   clip = "off")
+```
 
+Average values all parties **with relevance on national** votes/elections - min/max as eclipse for major parties
+
+```{r}
+
+ggplot(parties_rating,
+       aes(x = eco_pct_avg_x,
+           y = socio_pct_avg_y,
+           label = Partei)) +
+  geom_ellipse(
+    aes(x0 = eco_pct_avg_x,
+        y0 = socio_pct_avg_y,
+        a = (eco_pct_max_x - eco_pct_min_x) / 2, # Halbachse x
+        b = (socio_pct_max_y - socio_pct_min_y) / 2, # Halbachse y
+        angle = 0),
+    fill = "gray80", alpha = 0.4) +
+  geom_point(size = 3) +
+  
+  # Kleinere Parteien
+  geom_point(
+    data = subset(parties_rating,
+                  `Grosse Partei` == "n" &
+                    Relevanz_nationale_Abstimmungen != "-"),
+    aes(x = eco_x, y = socio_y),
+    shape = 21, fill = "grey", color = "black", size = 1, stroke = 1
+  ) +
+  # Labels der kleineren Partein
+  geom_text(
+    data = subset(parties_rating,
+                  `Grosse Partei` == "n" &
+                    Relevanz_nationale_Abstimmungen != "-"),
+    aes(x = eco_x, y = socio_y, label = Partei),
+    vjust = -1, fontface = "plain", color = "darkgrey"
+  ) +
+
+  geom_text(vjust = -0.8) +
+  geom_segment(aes(x = 50, xend = 50,
+                   y = 0, yend = 100), linetype = "dashed", color = "blue") +
+  geom_segment(aes(x = 0, xend = 100,
+                   y = 50, yend = 50), linetype = "dashed", color = "blue") +
+  annotate("text",
+           x = 0,
+           y = min(parties_rating$socio_pct_min_y) + 55,
+           label = "Links/staatsgläubig", size = 4, hjust = 0.5) +
+  annotate("text",
+           x = 100,
+           y = min(parties_rating$socio_pct_min_y) + 55,
+           label = "Rechts/marktwirtschaftlich", size = 4, hjust = 0.5) +
+  annotate("text",
+           x = 50,
+           y = min(parties_rating$socio_pct_min_y) - 3,
+           label = "Autoritär/Konservativ", size = 4, hjust = 0.5) +
+  annotate("text",
+           x = 50,
+           y = min(parties_rating$socio_pct_min_y) + 103,
+           label = "Libertär/Progressiv", size = 4, hjust = 0.5) +
+  scale_x_continuous(limits = c(-10, +110)) +
+  labs(x = "Wirtschaftspolitisch",
+       y = "Gesellschaftspolitisch",
+       title = "Politische Positionierung im Zwei-Achsen-Modell",
+       subtitle = "Grundlage: Durchschnitt des Abstimmungsverhaltens als Zentrum, Min-/Max als Ellipse") +
+  theme_minimal()+
+  theme(plot.title = element_text(size = 18,
+                                  margin = margin(b = 30)),
+        axis.title.x = element_text(size = 14,
+                                    margin = margin(t = 5)),
+        axis.title.y = element_text(size = 14,
+                                    margin = margin(r = 5))) +
+  coord_cartesian(ylim = c(0, 100),
+                  xlim = c(0, 100),
+                  clip = "off")
+```
+
+Average values all parties **irrelevant of relevance on national** votes/elections - min/max as eclipse for major parties
+
+```{r}
+
+{r}
+
+ggplot(parties_rating,
+       aes(x = eco_pct_avg_x,
+           y = socio_pct_avg_y,
+           label = Partei)) +
+  geom_ellipse(
+    aes(x0 = eco_pct_avg_x,
+        y0 = socio_pct_avg_y,
+        a = (eco_pct_max_x - eco_pct_min_x) / 2, # Halbachse x
+        b = (socio_pct_max_y - socio_pct_min_y) / 2, # Halbachse y
+        angle = 0),
+    fill = "gray80", alpha = 0.4) +
+  geom_point(size = 3) +
+  
+  # Kleinere Parteien
+  geom_point(data = subset(parties_rating,
+                           `Grosse Partei` == "n" #&
+                           #Relevanz_nationale_Abstimmungen != "-"
+                           )
+                  ,
+    aes(x = eco_x, y = socio_y),
+    shape = 21, fill = "grey", color = "black", size = 1, stroke = 1
+  ) +
+  # Labels der kleineren Partein
+  geom_text(data = subset(parties_rating,
+                          `Grosse Partei` == "n" #&
+                          #Relevanz_nationale_Abstimmungen != "-"
+                  )
+                  ,
+    aes(x = eco_x, y = socio_y, label = Partei),
+    vjust = -1, fontface = "plain", color = "darkgrey"
+  ) +
+
+  geom_text(vjust = -0.8) +
+  geom_segment(aes(x = 50, xend = 50,
+                   y = 0, yend = 100), linetype = "dashed", color = "blue") +
+  geom_segment(aes(x = 0, xend = 100,
+                   y = 50, yend = 50), linetype = "dashed", color = "blue") +
+  annotate("text",
+           x = 0,
+           y = min(parties_rating$socio_pct_min_y) + 55,
+           label = "Links/staatsgläubig", size = 4, hjust = 0.5) +
+  annotate("text",
+           x = 100,
+           y = min(parties_rating$socio_pct_min_y) + 55,
+           label = "Rechts/marktwirtschaftlich", size = 4, hjust = 0.5) +
+  annotate("text",
+           x = 50,
+           y = min(parties_rating$socio_pct_min_y) - 3,
+           label = "Autoritär/Konservativ", size = 4, hjust = 0.5) +
+  annotate("text",
+           x = 50,
+           y = min(parties_rating$socio_pct_min_y) + 103,
+           label = "Libertär/Progressiv", size = 4, hjust = 0.5) +
+  scale_x_continuous(limits = c(-10, +110)) +
+  labs(x = "Wirtschaftspolitisch",
+       y = "Gesellschaftspolitisch",
+       title = "Politische Positionierung im Zwei-Achsen-Modell",
+       subtitle = "Grundlage: Durchschnitt des Abstimmungsverhaltens als Zentrum, Min-/Max als Ellipse") +
+  theme_minimal()+
+  theme(plot.title = element_text(size = 18,
+                                  margin = margin(b = 30)),
+        axis.title.x = element_text(size = 14,
+                                    margin = margin(t = 5)),
+        axis.title.y = element_text(size = 14,
+                                    margin = margin(r = 5))) +
+  coord_cartesian(ylim = c(0, 100),
+                  xlim = c(0, 100),
+                  clip = "off")
 ```
