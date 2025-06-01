@@ -1,10 +1,17 @@
 ---
 title: "CAS thesis data"
+execute:
+  warning: false
 author: "DaaniiH"
-format: html
+date: 2025-06-01
+format:
+  html:
+    toc: true
+    toc-location: right
 editor: visual
 editor_options: 
   chunk_output_type: console
+theme: darkly
 ---
 
 # Libraries
