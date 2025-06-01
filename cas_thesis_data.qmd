@@ -7,9 +7,7 @@ editor_options:
   chunk_output_type: console
 ---
 
-## Libraries
-
-Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+# Libraries
 
 ```{r}
 
@@ -22,7 +20,7 @@ library(ggforce)
 
 ```
 
-## Initial data load
+# Initial data load
 
 ```{r}
 
@@ -46,9 +44,9 @@ parties_rating <- read_excel("~/CAS/Zertifikatsarbeit/data/parties_economic_soci
 
 ```
 
-### Lookup tables
+# Lookup tables
 
-Parteinamen
+## Parteinamen
 
 ```{r}
 
@@ -112,12 +110,11 @@ parteinamen$p_kuerzel <- paste0("p-", parteinamen$kuerzel)
 parteinamen <- parteinamen[, c("p_kuerzel", "kuerzel", "name")]
 ```
 
-## Transformation & visualization
+# Transformation & visualization
+
+## Abstimmungen
 
 ```{r}
-
-grep("^p-", names(voting), value = TRUE)
-paste(grep("^p-", names(voting), value = TRUE), collapse = ", ")
 
 voting <- voting_raw %>%
   mutate(datum = as.Date(datum, format = "%d.%m.%Y")) %>%  # Format-Umwandlung
@@ -194,15 +191,20 @@ voting <- voting_raw %>%
   )
 ```
 
-The `echo: false` option disables the printing of code (only output is displayed).
+```{r}
+grep("^p-", names(voting), value = TRUE)
+paste(grep("^p-", names(voting), value = TRUE), collapse = ", ")
+```
 
-### Parties: Multi-Dimensional-Model
+## Wahlen / Parteilandschaft
 
-Minimum values
+### Multi-Dimensions-Model
+
+#### Minimalwerte
+
+Für jede Partei den Minimalwert des Abstimmungsverhaltens zu verwenden, basiert auf der Zielsetzung, die klarste politische Position einer Partei in einem bestimmten Themenbereich zu identifizieren. Diese Methodik stellt sicher, dass auch bei wenigen Abweichungen von der Mehrheitslinie die tatsächliche Haltung der Partei deutlich erkennbar bleibt.
 
 ```{r}
-
-str(parties_rating)
 
 ggplot(parties_rating,
        aes(x = eco_pct_min_x,
@@ -249,7 +251,7 @@ ggplot(parties_rating,
 
 ```
 
-Average values and min/max as eclipse
+#### Durchschnittswerte als Zentrum und Min/Max als Ellipse
 
 ```{r}
 
@@ -303,7 +305,7 @@ ggplot(parties_rating,
                   clip = "off")
 ```
 
-Average values all parties **with relevance on national** votes/elections - min/max as eclipse for major parties
+#### Hauptparteien: Durchschnittswerte als Zentrum und Min/Max als Ellipse / Klein- und Regionalparteien nur mit ihrem Durchschnittswert
 
 ```{r}
 
@@ -311,32 +313,30 @@ ggplot(parties_rating,
        aes(x = eco_pct_avg_x,
            y = socio_pct_avg_y,
            label = Partei)) +
-  geom_ellipse(
-    aes(x0 = eco_pct_avg_x,
-        y0 = socio_pct_avg_y,
-        a = (eco_pct_max_x - eco_pct_min_x) / 2, # Halbachse x
-        b = (socio_pct_max_y - socio_pct_min_y) / 2, # Halbachse y
-        angle = 0),
-    fill = "gray80", alpha = 0.4) +
+  geom_ellipse(aes(x0 = eco_pct_avg_x,
+                   y0 = socio_pct_avg_y,
+                   a = (eco_pct_max_x - eco_pct_min_x) / 2, # Halbachse x
+                   b = (socio_pct_max_y - socio_pct_min_y) / 2, # Halbachse y
+                   angle = 0),
+               fill = "gray80", alpha = 0.4) +
   geom_point(size = 3) +
   
   # Kleinere Parteien
-  geom_point(
-    data = subset(parties_rating,
-                  `Grosse Partei` == "n" &
-                    Relevanz_nationale_Abstimmungen != "-"),
-    aes(x = eco_x, y = socio_y),
-    shape = 21, fill = "grey", color = "black", size = 1, stroke = 1
-  ) +
+  geom_point(data = subset(parties_rating,
+                           `Grosse Partei` == "n" &
+                             Relevanz_nationale_Abstimmungen != "-"),
+             aes(x = eco_x,
+                 y = socio_y),
+             shape = 21, fill = "grey", color = "black", size = 1, stroke = 1) +
+  
   # Labels der kleineren Partein
-  geom_text(
-    data = subset(parties_rating,
-                  `Grosse Partei` == "n" &
-                    Relevanz_nationale_Abstimmungen != "-"),
-    aes(x = eco_x, y = socio_y, label = Partei),
-    vjust = -1, fontface = "plain", color = "darkgrey"
-  ) +
-
+  geom_text(data = subset(parties_rating,
+                          `Grosse Partei` == "n" &
+                            Relevanz_nationale_Abstimmungen != "-"),
+            aes(x = eco_x,
+                y = socio_y,
+                label = Partei),
+            vjust = -1, fontface = "plain", color = "darkgrey") +
   geom_text(vjust = -0.8) +
   geom_segment(aes(x = 50, xend = 50,
                    y = 0, yend = 100), linetype = "dashed", color = "blue") +
@@ -362,7 +362,7 @@ ggplot(parties_rating,
   labs(x = "Wirtschaftspolitisch",
        y = "Gesellschaftspolitisch",
        title = "Politische Positionierung im Zwei-Achsen-Modell",
-       subtitle = "Grundlage: Durchschnitt des Abstimmungsverhaltens als Zentrum, Min-/Max als Ellipse") +
+       subtitle = "Durchschnitt des Abstimmungsverhaltens als Zentrum, Min-/Max als Ellipse") +
   theme_minimal()+
   theme(plot.title = element_text(size = 18,
                                   margin = margin(b = 30)),
@@ -375,11 +375,9 @@ ggplot(parties_rating,
                   clip = "off")
 ```
 
-Average values all parties **irrelevant of relevance on national** votes/elections - min/max as eclipse for major parties
+#### Hauptparteien: Durchschnittswerte als Zentrum und Min/Max als Ellipse / Verbände sowie Klein- und Regionalparteien nur mit ihrem Durchschnittswert
 
 ```{r}
-
-{r}
 
 ggplot(parties_rating,
        aes(x = eco_pct_avg_x,
@@ -449,4 +447,48 @@ ggplot(parties_rating,
   coord_cartesian(ylim = c(0, 100),
                   xlim = c(0, 100),
                   clip = "off")
+```
+
+### 3D-Koordinatensystem (Test)
+
+```{r}
+#install.packages("plotly")
+
+library(plotly)
+
+# Datenframe erstellen
+parties <- data.frame(
+  Partei = c("SP", "SVP", "FDP", "GPS", "GLP", "Mitte", "EVP", "EDU"),
+  Wirtschaft = c(20, 85, 80, 30, 60, 60, 40, 90),      # Links = niedrig, Rechts = hoch
+  Gesellschaft = c(90, 20, 55, 90, 75, 45, 50, 20),    # Libertär = hoch, Autoritär = niedrig
+  Kosmopolitismus = c(90, 15, 60, 95, 85, 50, 55, 20)  # Kosmopolitisch = hoch, Nationalistisch = niedrig
+)
+
+# Interaktives 3D-Scatterplot mit Plotly
+fig <- plot_ly(
+  data = parties,
+  x = ~Wirtschaft,
+  y = ~Gesellschaft,
+  z = ~Kosmopolitismus,
+  text = ~Partei,
+  type = 'scatter3d',
+  mode = 'markers+text',
+  marker = list(size = 5),
+  textposition = 'top center'
+)
+
+# Achsen benennen und Layout anpassen
+fig <- fig %>% layout(
+  scene = list(
+    xaxis = list(title = "Wirtschaftspolitik (links – rechts)"),
+    yaxis = list(title = "Gesellschaftspolitik (autoritär – libertär)"),
+    zaxis = list(title = "Kosmopolitismus – Nationalismus")
+  ),
+  title = "Schweizer Parteien im 3D-Koordinatensystem nach Kitschelt"
+)
+
+# Plot anzeigen
+fig
+
+
 ```
