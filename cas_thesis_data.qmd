@@ -1,17 +1,23 @@
 ---
 title: "CAS thesis data"
-execute:
-  warning: false
 author: "DaaniiH"
 date: 2025-06-01
+
+execute:
+  warning: false
 format:
   html:
     toc: true
     toc-location: right
+    code-fold: true
+    code-summary: "Code anzeigen" # Optional, Text für den Aufklapp-Link
+    code-tools: true              # Optional, Toolbar für Code-Chunks
+    number-sections: true
 editor: visual
 editor_options: 
   chunk_output_type: console
 theme: darkly
+number-sections: true
 ---
 
 # Libraries
@@ -20,101 +26,254 @@ theme: darkly
 
 library(readr)
 library(readxl)
+library(pxmake)   # Load PX files
+library(pxR)      # Load PX files
+library(jsonlite) # Load JSON files
+
+library(writexl)  # Write Excel files
+
 library(dplyr)
 library(tidyverse)
-library(ggplot2)
-library(ggforce)
+library(ggplot2)  # Diagrams
+library(ggforce)  # Diagrams
+library(DT)       # datatable()
 
+library(DescTools)
 ```
 
 # Initial data load
 
+## Lookup tables
+
+### Parteinamen
+
 ```{r}
 
-# Voting
+# Dataframe bilden aus zwei Vektoren
+parteinamen <- data.frame(
+  kuerzel = c("fdp", "sps", "svp", "mitte", "evp", "gps", "glp", "ucsp", "pda", "sd", "edu", "fps", "lega", "kvp", "mcg", "cvp", "bdp", "lps", "ldu", "poch", "rep", "eco", "sgv", "sbv", "sgb", "travs", "sav", "vsa", "vpod", "voev", "tcs", "vcs", "acs", "sbk", "ssv", "gem", "kdk", "kkjpd", "gdk", "ldk"),
+  
+  name = c("Freisinnig-demokratische Partei (FDP.Die Liberalen)", "Sozialdemokratische Partei", "Schweizerische Volkspartei (bis 1936 Parolen der BGB Bern)", "Die Mitte", "Evangelische Volkspartei", "Grüne Partei der Schweiz", "Grünliberale Partei", "Christlichsoziale Partei der Schweiz (von der CVP unabhängige CSP)", "Partei der Arbeit", "Schweizer Demokraten", "Eidgenössisch-Demokratische Union", "Autopartei", "Lega dei Ticinesi", "Katholische Volkspartei", "Mouvement Citoyens Genevois", "Christlichdemokratische Volkspartei", "Bürgerlich-Demokratische Partei", "Liberale Partei der Schweiz", "Landesring der Unabhängigen", "Progressive Organisationen der Schweiz", "Schweizerische Republikanische Bewegung", "Economiesuisse (bis 15.9.2000: Schweizerischer Handels- und Industrieverein SHIV (Vorort))", "Schweizerischer Gewerbeverband", "Schweizer Bauernverband", "Schweizerischer Gewerkschaftsbund", "Travail.Suisse (bis 2002: Parolen des Christlichnationalen Gewerkschaftsbunds (CNG); dieser fusionierte per 1.1.2003 mit der VSA zu Travail.Suisse)", "Schweizerischer Arbeitgeberverband (bis 1996: Zentralverband Schweizerischer Arbeitgeber-Organisationen ZSAO)", "Vereinigung schweizerischer Angestelltenverbände", "Verband des Personals öffentlicher Dienste", "Verband öffentlicher Verkehr", "Touring Club Schweiz", "Verkehrs-Club der Schweiz", "Automobil Club der Schweiz", "Schweizer Bischofskonferenz", "Schweizerischer Städteverband", "Schweizerischer Gemeindeverband", "Konferenz der Kantonsregierungen", "Konferenz der kantonalen Justiz- und Polizeidirektoren", "Schweizerische Gesundheitsdirektorenkonferenz", "Konferenz der kantonalen Landwirtschaftsdirektoren"),
+  stringsAsFactors = FALSE)
 
+# Neue Spalte mit "p-" Präfix für späteren Lookup der Parteiparolen
+parteinamen$p_kuerzel <- paste0("p-", parteinamen$kuerzel) 
+
+# Parteikürzel in Grossbuchstaben 
+parteinamen$kuerzel <-  toupper(parteinamen$kuerzel)
+
+# Spaltenreihenfolge anpassen: p_kuerzel, kuerzel, name
+parteinamen <- parteinamen[, c("p_kuerzel", "kuerzel", "name")]
+
+# Anzeige mit datatable()
+datatable(parteinamen,
+          filter = 'top',
+          options = list(pageLength = 7,
+          search = list(regex = TRUE,
+                        caseInsensitive = TRUE)))
+```
+
+## Abstimmungen
+
+```{r}
+
+# Schweizweite Abstimmungen
 voting_raw <- read_delim("~/CAS/Zertifikatsarbeit/data/votes/abstimmungen_swissvotes_DATASET CSV 09-02-2025.csv",
                      delim = ";",
                      escape_double = FALSE,
                      trim_ws = TRUE,
                      show_col_types = FALSE)
 
-
-# Election
-
-
-# Parties
-
-parties_rating <- read_excel("~/CAS/Zertifikatsarbeit/data/parties_economic_socio-political_rating.xlsx",
-                             sheet = "matrix_eco-socio_enhanced")
-
+# TODO evt. nur random sample berechnen auf grund Grösse...
+datatable(voting_raw,
+          filter = 'top',
+          options = list(pageLength = 7,
+          search = list(regex = TRUE,
+                        caseInsensitive = TRUE)))
 
 ```
 
-# Lookup tables
+## Wahlen
 
-## Parteinamen
+### Bundesebene
+
+#### Nationalrat
 
 ```{r}
 
+# # PX-Datei einlesen
+# elec_nationalrat_px <- read.px("~/CAS/Zertifikatsarbeit/data/elections/px-x-1702020000_103_BUND_NATIONALRAT.px")
+# 
+# # View PX Format
+# str(elec_nationalrat_px)
+# 
+# # PX-Objekt in Dataframe umwandeln
+# elec_nationalrat <- as.data.frame(elec_nationalrat_px)
 
 
-parteinamen <- data.frame(
-  kuerzel = c(
-    "fdp", "sps", "svp", "mitte", "evp", "gps", "glp", "ucsp", "pda", "sd", "edu", "fps", "lega", "kvp",
-    "mcg", "cvp", "bdp", "lps", "ldu", "poch", "rep", "eco", "sgv", "sbv", "sgb", "travs", "sav", "vsa",
-    "vpod", "voev", "tcs", "vcs", "acs", "sbk", "ssv", "gem", "kdk", "kkjpd", "gdk", "ldk"
-  ),
-  name = c(
-    "Freisinnig-demokratische Partei (FDP.Die Liberalen)",
-    "Sozialdemokratische Partei",
-    "Schweizerische Volkspartei (bis 1936 Parolen der BGB Bern)",
-    "Die Mitte",
-    "Evangelische Volkspartei",
-    "Grüne Partei der Schweiz",
-    "Grünliberale Partei",
-    "Christlichsoziale Partei der Schweiz (von der CVP unabhängige CSP)",
-    "Partei der Arbeit",
-    "Schweizer Demokraten",
-    "Eidgenössisch-Demokratische Union",
-    "Autopartei",
-    "Lega dei Ticinesi",
-    "Katholische Volkspartei",
-    "Mouvement Citoyens Genevois",
-    "Christlichdemokratische Volkspartei",
-    "Bürgerlich-Demokratische Partei",
-    "Liberale Partei der Schweiz",
-    "Landesring der Unabhängigen",
-    "Progressive Organisationen der Schweiz",
-    "Schweizerische Republikanische Bewegung",
-    "Economiesuisse (bis 15.9.2000: Schweizerischer Handels- und Industrieverein SHIV (Vorort))",
-    "Schweizerischer Gewerbeverband",
-    "Schweizer Bauernverband",
-    "Schweizerischer Gewerkschaftsbund",
-    "Travail.Suisse (bis 2002: Parolen des Christlichnationalen Gewerkschaftsbunds (CNG); dieser fusionierte per 1.1.2003 mit der VSA zu Travail.Suisse)",
-    "Schweizerischer Arbeitgeberverband (bis 1996: Zentralverband Schweizerischer Arbeitgeber-Organisationen ZSAO)",
-    "Vereinigung schweizerischer Angestelltenverbände",
-    "Verband des Personals öffentlicher Dienste",
-    "Verband öffentlicher Verkehr",
-    "Touring Club Schweiz",
-    "Verkehrs-Club der Schweiz",
-    "Automobil Club der Schweiz",
-    "Schweizer Bischofskonferenz",
-    "Schweizerischer Städteverband",
-    "Schweizerischer Gemeindeverband",
-    "Konferenz der Kantonsregierungen",
-    "Konferenz der kantonalen Justiz- und Polizeidirektoren",
-    "Schweizerische Gesundheitsdirektorenkonferenz",
-    "Konferenz der kantonalen Landwirtschaftsdirektoren"
-  ),
-  stringsAsFactors = FALSE
-)
+# Nationalrat: Daten einlesen
+elec_nationalrat  <- read_excel("~/CAS/Zertifikatsarbeit/data/elections/Ratsmitglieder_1848_DE_BUND_NR.xlsx")
 
-# Neue Spalte mit "p-" Präfix
-parteinamen$p_kuerzel <- paste0("p-", parteinamen$kuerzel)
+str(elec_nationalrat)
+```
 
-# Spaltenreihenfolge anpassen: p_kuerzel, kuerzel, name
-parteinamen <- parteinamen[, c("p_kuerzel", "kuerzel", "name")]
+#### Ständerat
+
+```{r}
+
+# Ständerat: Daten einlesen
+elec_ständerat  <- read_excel("~/CAS/Zertifikatsarbeit/data/elections/Ratsmitglieder_1848_DE_BUND_SR.xlsx")
+
+str(elec_ständerat)
+```
+
+### Kantonsebene
+
+#### Kantonale Parlamente (Legislative)
+
+```{r}
+
+# TODO Die Kantonalen Abstimmungen finden nicht in allen kantonen gleichzeitg statt. Deshalb genauer die Räte/Konstellation zum Zeitpunkt der jeweiligen Abstimmung zu prüfen.
+
+
+# Struktur der "schön formatierten" Exceldatei lässt keinen "simplen" Import zu.
+# Header ist in Zeile 2 und nicht vollständig
+# Daten (für Kantone) starten in Zeile 4 aber enden auf Zeile 29 bevor es mit Kommentaren und Fussnoten weitergeht 
+
+
+# Header aus Zeile 2 für Spaltennamen lesen
+tmp_header <- read_excel("~/CAS/Zertifikatsarbeit/data/elections/je-d-17.02.05.01.03_KANTON_Kantonale_Parlamentswahlen.xlsx", 
+                     sheet = 1, 
+                     skip = 1,   # Header ist Zeile 2
+                     n_max = 0) %>%
+  names()
+
+# Lücken im Header anpassen (i.e. erste beiden Spalten benennen)
+tmp_header <- c("Kanton", "Leer", tmp_header)
+
+tmp_name_map <- c("Kanton"        = "Kanton",
+                  "Leer"          = "Leer",
+                  "Wahljahr 5)"   = "Wahljahr",
+                  "FDP 2)"        = "FDP",
+                  "SP"            = "SP",
+                  "SVP"           = "SVP",
+                  "LPS 2)"        = "LPS",
+                  "EVP"           = "EVP",
+                  "CSP"           = "CSP",
+                  "GLP"           = "GLP",
+                  "Die Mitte 8)"  = "Mitte",
+                  "CVP 3) 8)"     = "CVP",
+                  "BDP 8)"        = "BDP",
+                  "PdA"           = "PdA",
+                  "PSA"           = "PSA",
+                  "Grüne 9)"      = "Grüne",
+                  "FGA"           = "FGA",
+                  "Sol."          = "Sol.",
+                  "EDU"           = "EDU",
+                  "Lega"          = "Lega",
+                  "MCG (MCR)"     = "MCR",
+                  "Übrige 4)"     = "Übrige",
+                  "Total"         = "Total")
+
+
+
+# Automatisch ersetzen
+tmp_header <- ifelse(tmp_header %in% names(tmp_name_map),
+                     tmp_name_map[tmp_header],
+                     tmp_header)
+
+print(tmp_header)
+
+
+# Daten ab Zeile 4 importieren
+elec_kantonsparlament_raw <- read_excel("~/CAS/Zertifikatsarbeit/data/elections/je-d-17.02.05.01.03_KANTON_Kantonale_Parlamentswahlen.xlsx", 
+                 sheet = 1, 
+                 skip = 3,         # überspringt die ersten 3 Zeilen
+                 col_names = tmp_header)
+
+# Schritt 4: Nur Zeilen behalten, in denen "Wahljahr" nicht NA ist
+elec_kantonsparlament <- elec_kantonsparlament_raw  %>%
+  filter(!is.na(Wahljahr)) %>% 
+  select(-Leer)
+
+# Ergebnis anzeigen
+print(elec_kantonsparlament)
+```
+
+#### Kantonale Regierung (Exekutive)
+
+```{r}
+
+# TODO Die Kantonalen Abstimmungen finden nicht in allen kantonen gleichzeitg statt. Deshalb genauer die Räte/Konstellation zum Zeitpunkt der jeweiligen Abstimmung zu prüfen.
+
+
+# Struktur der "schön formatierten" Exceldatei lässt keinen "simplen" Import zu.
+# Header ist in Zeile 2 und nicht vollständig
+# Daten (für Kantone) starten in Zeile 4 aber enden auf Zeile 29 bevor es mit Kommentaren und Fussnoten weitergeht 
+
+
+# Header aus Zeile 2 für Spaltennamen lesen
+tmp_header <- read_excel("~/CAS/Zertifikatsarbeit/data/elections/je-d-17.02.06.01_KANTON_Kantonale_Regierungswahlen.xlsx", 
+                     sheet = 1, 
+                     skip = 1,   # Header ist Zeile 2
+                     n_max = 0) %>%
+  names()
+
+# Lücken im Header anpassen (i.e. erste beiden Spalten benennen)
+tmp_header <- c("Kanton", tmp_header)
+
+tmp_name_map <- c("Kanton"        = "Kanton",
+                  "Wahljahr 1"    = "Wahljahr",
+                  "FDP 2"         = "FDP",
+                  "SP"            = "SP",
+                  "SVP"           = "SVP",
+                  "LP 2"          = "LPS",
+                  "EVP"           = "EVP",
+                  "CSP"           = "CSP",
+                  "GLP"           = "GLP",
+                  "Die Mitte 3"   = "Mitte",
+                  "CVP 3"         = "CVP",
+                  "BDP 3"         = "BDP",
+                  "PdA"           = "PdA",
+                  "PSA"           = "PSA",
+                  "Grüne 5"       = "Grüne",
+                  "FGA"           = "FGA",
+                  "Sol."          = "Sol.",
+                  "Lega"          = "Lega",
+                  "MCG (MCR)"     = "MCR",
+                  "Übrige 4"      = "Übrige",
+                  "Total"         = "Total")
+
+# Automatisch ersetzen
+tmp_header <- ifelse(tmp_header %in% names(tmp_name_map),
+                     tmp_name_map[tmp_header],
+                     tmp_header)
+
+print(tmp_header)
+
+
+# Daten ab Zeile 4 importieren
+elec_kantonsregierung_raw <- read_excel("~/CAS/Zertifikatsarbeit/data/elections/je-d-17.02.06.01_KANTON_Kantonale_Regierungswahlen.xlsx", 
+                 sheet = 1, 
+                 skip = 3,         # überspringt die ersten 3 Zeilen
+                 col_names = tmp_header)
+
+# Schritt 4: Nur Zeilen behalten, in denen "Wahljahr" nicht NA ist
+elec_kantonsregierung <- elec_kantonsregierung_raw  %>%
+  filter(!is.na(Wahljahr)) 
+
+
+# Ergebnis anzeigen
+print(elec_kantonsparlament)
+
+```
+
+## Parteilandschaft
+
+```{r}
+
+parties_rating <- read_excel("~/CAS/Zertifikatsarbeit/data/parties_economic_socio-political_rating.xlsx",
+                             sheet = "matrix_eco-socio_enhanced")
 ```
 
 # Transformation & visualization
@@ -171,7 +330,7 @@ voting <- voting_raw %>%
                      #66 Neutral: keine Parole oder Empfehlung auf leer einlegen                        #9999 Organisation existiert nicht
                      #. Unbekannt
          volk,       #0 Eine Mehrheit der Abstimmenden hat die Vorlage abgelehnt
-                     #1 Eine Mehrheit der Abstimmenden hat die Vorlage ange-nommen
+                     #1 Eine Mehrheit der Abstimmenden hat die Vorlage angenommen
                      #8 Bei Stichfragen:  Mehrheit für Gegenentwurfs
                      #9 Bei Stichfragen:  Mehrheit Volksinitiative
          stand,
@@ -203,7 +362,190 @@ grep("^p-", names(voting), value = TRUE)
 paste(grep("^p-", names(voting), value = TRUE), collapse = ", ")
 ```
 
-## Wahlen / Parteilandschaft
+## Wahlen
+
+### Bundesebene
+
+#### Nationalrat
+
+```{r}
+
+#TODO Es kann innerhalb der Legislatur Wechsel geben --> Anstelle der heute "Aktiven" ist es deshalb genauer die Räte/Konstellation zum Zeitpunkt der jeweiligen Abstimmung zu prüfen. 
+
+# Anzeige mit datatable()
+datatable(elec_nationalrat,
+          filter = 'top',
+          options = list(pageLength = 7,
+          search = list(regex = TRUE,
+                        caseInsensitive = TRUE)))
+
+
+# Fehlende Werte (NA), Klassen und Levels prüfen
+Abstract(elec_nationalrat)
+PlotMiss(elec_nationalrat)
+
+# Datensatz reduzieren auf Aktive und doppelte Einträge elimnieren
+elec_nationalrat_reduced <- elec_nationalrat %>%
+  filter(Active == TRUE) %>% 
+  distinct(.keep_all = TRUE) %>% 
+  select(CantonAbbreviation,
+         CantonName,
+         PartyAbbreviation,
+         PartyName) %>% 
+  mutate(value = 1)
+
+datatable(elec_nationalrat_reduced,
+          filter = 'top',
+          options = list(pageLength = 7,
+          search = list(regex = TRUE,
+                        caseInsensitive = TRUE)))
+
+# Sitze pro Kanton, Partei und Jahr 
+    
+    # long format
+      df_sum <- elec_nationalrat_reduced %>%
+      group_by(CantonAbbreviation, PartyAbbreviation) %>%
+      summarise(sum_value = sum(value, na.rm = TRUE),
+                .groups = "drop")
+    
+    # wide format
+    # Pivotieren: Partei-Spalten erzeugen
+    df_wide <- df_sum %>%
+      pivot_wider(names_from = PartyAbbreviation,
+                  values_from = sum_value,
+                  values_fill = 0)
+    
+    
+    
+    # Partei-Spaltennamen extrahieren (ohne Kanton/Jahr)
+    partei_cols <- setdiff(names(df_wide),
+                           c("CantonAbbreviation"))
+    
+    # Spaltensummen der Parteien berechnen für Sortierung
+    partei_sums <- colSums(df_wide[partei_cols])
+    
+    # Zeilensumme der Kantone/Jahre hinzufügen
+    df_wide$Total <- rowSums(df_wide[partei_cols])
+    
+    
+    # Parteispalten-Anordnung nach Summe sortieren
+    sorted_partei <- names(sort(partei_sums,
+                                decreasing = TRUE))
+    
+    
+    # Dataframe neu anordnen: Kanton/Jahr,  sortierte und gefilterte Parteien
+    elec_nationalrat_final <- df_wide[, c(setdiff(names(df_wide),
+                                                  partei_cols),
+                                          sorted_partei)] %>% 
+      arrange(desc(Total))
+    
+datatable(elec_nationalrat_final,
+          filter = 'top',
+          options = list(pageLength = 7,
+          search = list(regex = TRUE,
+                        caseInsensitive = TRUE)))
+
+
+```
+
+#### Ständerat
+
+```{r}
+
+#TODO Es kann innerhalb der Legislatur Wechsel geben --> Anstelle der heute "Aktiven" ist es deshalb genauer die Räte/Konstellation zum Zeitpunkt der jeweiligen Abstimmung zu prüfen.
+
+
+# Anzeige mit datatable()
+datatable(elec_ständerat,
+          filter = 'top',
+          options = list(pageLength = 7,
+          search = list(regex = TRUE,
+                        caseInsensitive = TRUE)))
+
+
+# Fehlende Werte (NA), Klassen und Levels prüfen
+Abstract(elec_ständerat)
+PlotMiss(elec_ständerat)
+
+# Datensatz reduzieren auf Aktive und doppelte Einträge elimnieren
+elec_ständerat_reduced <- elec_ständerat %>%
+  filter(Active == TRUE) %>% 
+  distinct(.keep_all = TRUE) %>% 
+  select(CantonAbbreviation,
+         CantonName,
+         PartyAbbreviation,
+         PartyName) %>% 
+  mutate(value = 1)
+
+datatable(elec_ständerat_reduced,
+          filter = 'top',
+          options = list(pageLength = 7,
+          search = list(regex = TRUE,
+                        caseInsensitive = TRUE)))
+
+# Sitze pro Kanton, Partei und Jahr 
+    
+    # long format
+      df_sum <- elec_ständerat_reduced %>%
+      group_by(CantonAbbreviation, PartyAbbreviation) %>%
+      summarise(sum_value = sum(value, na.rm = TRUE),
+                .groups = "drop")
+    
+    # wide format
+    # Pivotieren: Partei-Spalten erzeugen
+    df_wide <- df_sum %>%
+      pivot_wider(names_from = PartyAbbreviation,
+                  values_from = sum_value,
+                  values_fill = 0)
+    
+    
+    # Partei-Spaltennamen extrahieren (ohne Kanton/Jahr)
+    partei_cols <- setdiff(names(df_wide),
+                           c("CantonAbbreviation"))
+    
+    # Spaltensummen der Parteien berechnen für Sortierung
+    partei_sums <- colSums(df_wide[partei_cols])
+    
+    # Zeilensumme der Kantone/Jahre hinzufügen
+    df_wide$Total <- rowSums(df_wide[partei_cols])
+    
+    
+    # Parteispalten-Anordnung nach Summe sortieren
+    sorted_partei <- names(sort(partei_sums,
+                                decreasing = TRUE))
+    
+    
+    # Dataframe neu anordnen: Kanton/Jahr,  sortierte und gefilterte Parteien
+    elec_ständerat_final <- df_wide[, c(setdiff(names(df_wide),
+                                                  partei_cols),
+                                        sorted_partei)] %>% 
+      arrange(desc(Total))
+    
+datatable(elec_ständerat_final,
+          filter = 'top',
+          options = list(pageLength = 7,
+          search = list(regex = TRUE,
+                        caseInsensitive = TRUE)))
+
+```
+
+### Kantonsebene
+
+#### Kantonsparlament
+
+```{r}
+
+
+```
+
+#### Kantonsregierung
+
+```{r}
+
+
+```
+
+## Parteilandschaft
 
 ### Multi-Dimensions-Model
 
@@ -456,7 +798,7 @@ ggplot(parties_rating,
                   clip = "off")
 ```
 
-### 3D-Koordinatensystem (Test)
+### 3D-Koordinatensystem (Testweise)
 
 ```{r}
 #install.packages("plotly")
