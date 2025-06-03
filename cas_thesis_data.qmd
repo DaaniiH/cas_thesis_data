@@ -110,16 +110,6 @@ datatable(voting_raw,
 
 ```{r}
 
-# # PX-Datei einlesen
-# elec_nationalrat_px <- read.px("~/CAS/Zertifikatsarbeit/data/elections/px-x-1702020000_103_BUND_NATIONALRAT.px")
-# 
-# # View PX Format
-# str(elec_nationalrat_px)
-# 
-# # PX-Objekt in Dataframe umwandeln
-# elec_nationalrat <- as.data.frame(elec_nationalrat_px)
-
-
 # Nationalrat: Daten einlesen
 elec_nationalrat  <- read_excel("~/CAS/Zertifikatsarbeit/data/elections/Ratsmitglieder_1848_DE_BUND_NR.xlsx")
 
@@ -215,485 +205,87 @@ Die Kantonalen Abstimmungen finden nicht in allen kantonen gleichzeitg statt. De
 
 Die Struktur der "schön formatierten" Exceldatei lässt keinen "simplen" Import zu.
 
+-   1 Excelsheet / Jahr
+
 -   Header ist in Zeile 2 und nicht vollständig
 
 -   Daten (für Kantone) starten in Zeile 4 aber enden auf Zeile 29 bevor es mit Kommentaren und Fussnoten weitergeht.
 
-##### Sheet 1: 2025
+Dateipfad und gewünschte Sheets festlegen
 
 ```{r}
+dateipfad <- "~/CAS/Zertifikatsarbeit/data/elections/je-d-17.02.06.01_KANTON_Kantonale_Regierungswahlen.xlsx"  
 
-# Header aus Zeile 2 für Spaltennamen lesen
-tmp_header <- read_excel("~/CAS/Zertifikatsarbeit/data/elections/je-d-17.02.06.01_KANTON_Kantonale_Regierungswahlen.xlsx", 
-                     sheet = 1, 
-                     skip = 1,   # Header ist Zeile 2
-                     n_max = 0) %>%
-  names()
-
-# Lücken im Header anpassen (i.e. erste Spalten benennen)
-tmp_header <- c("Kanton", tmp_header)
-
-tmp_name_map <- c("Kanton"        = "Kanton",
-                  "Wahljahr 1"    = "Wahljahr",
-                  "FDP 2"         = "FDP",
-                  "SP"            = "SP",
-                  "SVP"           = "SVP",
-                  "LP 2"          = "LPS",
-                  "EVP"           = "EVP",
-                  "CSP"           = "CSP",
-                  "GLP"           = "GLP",
-                  "Die Mitte 3"   = "Mitte",
-                  "CVP 3"         = "CVP",
-                  "BDP 3"         = "BDP",
-                  "PdA"           = "PdA",
-                  "PSA"           = "PSA",
-                  "Grüne 5"       = "Grüne",
-                  "FGA"           = "FGA",
-                  "Sol."          = "Sol.",
-                  "Lega"          = "Lega",
-                  "MCG (MCR)"     = "MCR",
-                  "Übrige 4"      = "Übrige",
-                  "Total"         = "Total")
-
-# Automatisch ersetzen
-tmp_header_neu <- ifelse(tmp_header %in% names(tmp_name_map),
-                     tmp_name_map[tmp_header],
-                     tmp_header)
-
-print(tmp_header_neu)
-
-# Daten ab Zeile 4 importieren
-elec_kantonsregierung_raw <- read_excel("~/CAS/Zertifikatsarbeit/data/elections/je-d-17.02.06.01_KANTON_Kantonale_Regierungswahlen.xlsx", 
-                 sheet = 1, 
-                 skip = 3,         # überspringt die ersten 3 Zeilen
-                 col_names = tmp_header_neu)
-
-# Schritt 4: Nur Zeilen behalten, in denen "Wahljahr" nicht NA ist
-elec_kantonsregierung_2025 <- elec_kantonsregierung_raw  %>%
-  filter(!is.na(Wahljahr)) %>%
-  select(Kanton, where(~ {x <- suppressWarnings(as.numeric(.x))
-    sum(x, na.rm = TRUE) > 0}))
-
-# Ergebnis anzeigen
-print(elec_kantonsregierung_2025)
+selected_sheets <- c("2024", "2023", "2022","2021","2020","2019")
 ```
 
-##### Sheet 2: 2024
+Function
 
 ```{r}
 
+import_election_data <- function(dateipfad, sheetname) {
+  
+  # Headerzeilen einlesen  
+  header <- readxl::read_excel(dateipfad,
+                               sheet = sheetname,
+                               skip = 1,
+                               n_max = 0) %>%
+    names()
+  
+  # Header anpassen: Wahljahr vereinheitlichen und Kanton hinzufügen
+  header[grepl("^Wahljahr", header)] <- "Wahljahr" 
+  header <- c("Kanton", header)
+        
+  # Daten ab Zeile 4 importieren
+  daten_raw <- read_excel(dateipfad,
+                          sheet = sheetname,
+                          skip = 3,
+                          col_names = header)
+  
+  # Zeilen ohne "Wahljahr" ausschliessen
+  wahljahr_col <- names(daten_raw)[grepl("^Wahljahr",
+                                         names(daten_raw))][1]
+  names(daten_raw)[names(daten_raw) == wahljahr_col] <- "Wahljahr"
 
-# Header aus Zeile 2 für Spaltennamen lesen
-tmp_header <- read_excel("~/CAS/Zertifikatsarbeit/data/elections/je-d-17.02.06.01_KANTON_Kantonale_Regierungswahlen.xlsx", 
-                     sheet = 2, 
-                     skip = 1,   # Header ist Zeile 2
-                     n_max = 0) %>%
-  names()
-
-# Lücken im Header anpassen (i.e. erste Spalten benennen)
-tmp_header <- c("Kanton", tmp_header)
-cat(paste0('"', tmp_header, '"', ","), sep = "\n")
-
-tmp_name_map <- c("Kanton"        = "Kanton",
-                  "Wahljahr 1"    = "Wahljahr",
-                  "FDP 2"         = "FDP",
-                  "SP"            = "SP",
-                  "SVP"           = "SVP",
-                  "LP 2"          = "LPS",
-                  "EVP"           = "EVP",
-                  "CSP"           = "CSP",
-                  "GLP"           = "GLP",
-                  "Die Mitte 3"   = "Mitte",
-                  "CVP 3"         = "CVP",
-                  "BDP 3"         = "BDP",
-                  "PdA"           = "PdA",
-                  "PSA"           = "PSA",
-                  "Grüne 5"       = "Grüne",
-                  "FGA"           = "FGA",
-                  "Sol."          = "Sol.",
-                  "Lega"          = "Lega",
-                  "MCG (MCR)"     = "MCR",
-                  "Übrige 4"      = "Übrige",
-                  "Total"         = "Total")
-
-# Automatisch ersetzen
-tmp_header_neu <- ifelse(tmp_header %in% names(tmp_name_map),
-                     tmp_name_map[tmp_header],
-                     tmp_header)
-
-print(tmp_header_neu)
-
-# Daten ab Zeile 4 importieren
-elec_kantonsregierung_raw <- read_excel("~/CAS/Zertifikatsarbeit/data/elections/je-d-17.02.06.01_KANTON_Kantonale_Regierungswahlen.xlsx", 
-                 sheet = 2, 
-                 skip = 3,         # überspringt die ersten 3 Zeilen
-                 col_names = tmp_header_neu)
-
-# Schritt 4: Nur Zeilen behalten, in denen "Wahljahr" nicht NA ist
-elec_kantonsregierung_2024 <- elec_kantonsregierung_raw  %>%
-  filter(!is.na(Wahljahr)) %>%
-  select(Kanton, where(~ {x <- suppressWarnings(as.numeric(.x))
-    sum(x, na.rm = TRUE) > 0}))
-
-# Ergebnis anzeigen
-print(elec_kantonsregierung_2024)
+  daten_wide <- daten_raw %>%
+    filter(!is.na(suppressWarnings(as.numeric(.data[[wahljahr_col]]))))
+  
+  # Zu pivotierenden Spalten in numeric umwandeln
+  cols_pivot <- setdiff(names(daten_wide), c("Kanton", wahljahr_col))
+  daten_wide <- daten_wide %>%
+    mutate(across(all_of(cols_pivot), as.numeric))
+  
+  # 6. Pivotieren
+  daten_long <- daten_wide %>%
+    pivot_longer(
+      cols = all_of(cols_pivot),
+      names_to = "Partei",
+      values_to = "Wert")
+  
+  return(daten_long)
+}
 ```
 
-##### Sheet 3: 2023
+Function ausführen: Import und Konsolidation
 
 ```{r}
 
-
-# Header aus Zeile 2 für Spaltennamen lesen
-tmp_header <- read_excel("~/CAS/Zertifikatsarbeit/data/elections/je-d-17.02.06.01_KANTON_Kantonale_Regierungswahlen.xlsx", 
-                     sheet = 3, 
-                     skip = 1,   # Header ist Zeile 2
-                     n_max = 0) %>%
-  names()
-
-# Lücken im Header anpassen (i.e. erste Spalten benennen)
-tmp_header <- c("Kanton", tmp_header)
-cat(paste0('"', tmp_header, '"', ","), sep = "\n")
-
-tmp_name_map <- c("Kanton"        = "Kanton",
-                  "Wahljahr 1)"    = "Wahljahr",
-                  "FDP 2)"         = "FDP",
-                  "SP"            = "SP",
-                  "SVP"           = "SVP",
-                  "LP 2)"          = "LPS",
-                  "EVP"           = "EVP",
-                  "CSP"           = "CSP",
-                  "GLP"           = "GLP",
-                  "Die Mitte 3)"   = "Mitte",
-                  "CVP 3)"         = "CVP",
-                  "BDP 3)"         = "BDP",
-                  "PdA"           = "PdA",
-                  "PSA"           = "PSA",
-                  "Grüne 5)"       = "Grüne",
-                  "FGA"           = "FGA",
-                  "Sol."          = "Sol.",
-                  "Lega"          = "Lega",
-                  "MCG (MCR)"     = "MCR",
-                  "Übrige 4)"      = "Übrige",
-                  "Total"         = "Total")
-
-# Automatisch ersetzen
-tmp_header_neu <- ifelse(tmp_header %in% names(tmp_name_map),
-                     tmp_name_map[tmp_header],
-                     tmp_header)
-
-print(tmp_header_neu)
-
-# Daten ab Zeile 4 importieren
-elec_kantonsregierung_raw <- read_excel("~/CAS/Zertifikatsarbeit/data/elections/je-d-17.02.06.01_KANTON_Kantonale_Regierungswahlen.xlsx", 
-                 sheet = 3, 
-                 skip = 3,         # überspringt die ersten 3 Zeilen
-                 col_names = tmp_header_neu)
-
-# Schritt 4: Nur Zeilen behalten, in denen "Wahljahr" nicht NA ist
-elec_kantonsregierung_2023 <- elec_kantonsregierung_raw  %>%
-  filter(!is.na(Wahljahr)) %>%
-  select(Kanton, where(~ {x <- suppressWarnings(as.numeric(.x))
-    sum(x, na.rm = TRUE) > 0}))
-
-# Ergebnis anzeigen
-print(elec_kantonsregierung_2023)
-```
-
-##### Sheet 4: 2022
-
-```{r}
-
-
-# Header aus Zeile 2 für Spaltennamen lesen
-tmp_header <- read_excel("~/CAS/Zertifikatsarbeit/data/elections/je-d-17.02.06.01_KANTON_Kantonale_Regierungswahlen.xlsx", 
-                     sheet = 4, 
-                     skip = 1,   # Header ist Zeile 2
-                     n_max = 0) %>%
-  names()
-
-# Lücken im Header anpassen (i.e. erste Spalten benennen)
-tmp_header <- c("Kanton", tmp_header)
-cat(paste0('"', tmp_header, '"', ","), sep = "\n")
-
-tmp_name_map <- c("Kanton"        = "Kanton",
-                  "Wahljahr 1)"    = "Wahljahr",
-                  "FDP 2)"         = "FDP",
-                  "SP"            = "SP",
-                  "SVP"           = "SVP",
-                  "LP 2)"          = "LPS",
-                  "EVP"           = "EVP",
-                  "CSP"           = "CSP",
-                  "GLP"           = "GLP",
-                  "Die Mitte 3)"   = "Mitte",
-                  "CVP 3)"         = "CVP",
-                  "BDP 3)"         = "BDP",
-                  "PdA"           = "PdA",
-                  "PSA"           = "PSA",
-                  "Grüne 6)"       = "Grüne",
-                  "FGA"           = "FGA",
-                  "Sol."          = "Sol.",
-                  "Lega"          = "Lega",
-                  "MCR"     = "MCR",
-                  "Übrige 4)"      = "Übrige",
-                  "Total"         = "Total")
-
-# Automatisch ersetzen
-tmp_header_neu <- ifelse(tmp_header %in% names(tmp_name_map),
-                     tmp_name_map[tmp_header],
-                     tmp_header)
-
-print(tmp_header_neu)
-
-# Daten ab Zeile 4 importieren
-elec_kantonsregierung_raw <- read_excel("~/CAS/Zertifikatsarbeit/data/elections/je-d-17.02.06.01_KANTON_Kantonale_Regierungswahlen.xlsx", 
-                 sheet = 4, 
-                 skip = 3,         # überspringt die ersten 3 Zeilen
-                 col_names = tmp_header_neu)
-
-# Schritt 4: Nur Zeilen behalten, in denen "Wahljahr" nicht NA ist
-elec_kantonsregierung_2022 <- elec_kantonsregierung_raw  %>%
-  filter(!is.na(Wahljahr)) %>%
-  select(Kanton, where(~ {x <- suppressWarnings(as.numeric(.x))
-    sum(x, na.rm = TRUE) > 0}))
-
-# Ergebnis anzeigen
-print(elec_kantonsregierung_2022)
-
-```
-
-##### Sheet 5: 2021
-
-```{r}
-
-
-# Header aus Zeile 2 für Spaltennamen lesen
-tmp_header <- read_excel("~/CAS/Zertifikatsarbeit/data/elections/je-d-17.02.06.01_KANTON_Kantonale_Regierungswahlen.xlsx", 
-                     sheet = 5, 
-                     skip = 1,   # Header ist Zeile 2
-                     n_max = 0) %>%
-  names()
-
-# Lücken im Header anpassen (i.e. erste Spalten benennen)
-tmp_header <- c("Kanton", tmp_header)
-cat(paste0('"', tmp_header, '"', ","), sep = "\n")
-
-tmp_name_map <- c("Kanton"        = "Kanton",
-                  "Wahljahr 1)"    = "Wahljahr",
-                  "FDP 2)"         = "FDP",
-                  "SP"            = "SP",
-                  "SVP"           = "SVP",
-                  "LP 2)"          = "LPS",
-                  "EVP"           = "EVP",
-                  "CSP"           = "CSP",
-                  "GLP"           = "GLP",
-                  "Die Mitte 3)"   = "Mitte",
-                  "CVP 3)"         = "CVP",
-                  "BDP 5)"         = "BDP",
-                  "PdA"           = "PdA",
-                  "PSA"           = "PSA",
-                  "GPS"       = "Grüne",
-                  "FGA"           = "FGA",
-                  "Sol."          = "Sol.",
-                  "Lega"          = "Lega",
-                  "MCR"     = "MCR",
-                  "Übrige 4)"      = "Übrige",
-                  "Total"         = "Total")
-
-# Automatisch ersetzen
-tmp_header_neu <- ifelse(tmp_header %in% names(tmp_name_map),
-                     tmp_name_map[tmp_header],
-                     tmp_header)
-
-print(tmp_header_neu)
-
-# Daten ab Zeile 4 importieren
-elec_kantonsregierung_raw <- read_excel("~/CAS/Zertifikatsarbeit/data/elections/je-d-17.02.06.01_KANTON_Kantonale_Regierungswahlen.xlsx", 
-                 sheet = 5, 
-                 skip = 3,         # überspringt die ersten 3 Zeilen
-                 col_names = tmp_header_neu)
-
-# Schritt 4: Nur Zeilen behalten, in denen "Wahljahr" nicht NA ist
-elec_kantonsregierung_2021 <- elec_kantonsregierung_raw  %>%
-  filter(!is.na(Wahljahr)) %>%
-  select(Kanton, where(~ {x <- suppressWarnings(as.numeric(.x))
-    sum(x, na.rm = TRUE) > 0}))
-
-# Ergebnis anzeigen
-print(elec_kantonsregierung_2021)
-
-```
-
-##### Sheet 6: 2020
-
-```{r}
-
-# Header aus Zeile 2 für Spaltennamen lesen
-tmp_header <- read_excel("~/CAS/Zertifikatsarbeit/data/elections/je-d-17.02.06.01_KANTON_Kantonale_Regierungswahlen.xlsx", 
-                     sheet = 6, 
-                     skip = 1,   # Header ist Zeile 2
-                     n_max = 0) %>%
-  names()
-
-# Lücken im Header anpassen (i.e. erste Spalten benennen)
-tmp_header <- c("Kanton", tmp_header)
-cat(paste0('"', tmp_header, '"', ","), sep = "\n")
-
-tmp_name_map <- c("Kanton"         = "Kanton",
-                  "Wahljahr 1)"    = "Wahljahr",
-                  "FDP 2)"         = "FDP",
-                  "CVP 3)"         = "CVP",
-                  "SP"             = "SP",
-                  "SVP"            = "SVP",
-                  "LP 2)"          = "LPS",
-                  "CSP"            = "CSP",
-                  "GLP"            = "GLP",
-                  "BDP"            = "BDP",
-                  "GPS"            = "Grüne",
-                  "Lega"           = "Lega",
-                  "MCR"            = "MCR",
-                  "Übrige 4)"      = "Übrige",
-                  "Total"          = "Total")
-
-# Automatisch ersetzen
-tmp_header_neu <- ifelse(tmp_header %in% names(tmp_name_map),
-                     tmp_name_map[tmp_header],
-                     tmp_header)
-
-print(tmp_header_neu)
-
-# Daten ab Zeile 4 importieren
-elec_kantonsregierung_raw <- read_excel("~/CAS/Zertifikatsarbeit/data/elections/je-d-17.02.06.01_KANTON_Kantonale_Regierungswahlen.xlsx", 
-                 sheet = 6, 
-                 skip = 3,         # überspringt die ersten 3 Zeilen
-                 col_names = tmp_header_neu)
-
-# Schritt 4: Nur Zeilen behalten, in denen "Wahljahr" nicht NA ist
-elec_kantonsregierung_2020 <- elec_kantonsregierung_raw  %>%
-  filter(!is.na(Wahljahr)) %>%
-  select(Kanton, where(~ {x <- suppressWarnings(as.numeric(.x))
-    sum(x, na.rm = TRUE) > 0}))
-
-
-# Ergebnis anzeigen
-print(elec_kantonsregierung_2020)
-
-```
-
-##### Sheet 7: 2019
-
-```{r}
-
-
-# Header aus Zeile 2 für Spaltennamen lesen
-tmp_header <- read_excel("~/CAS/Zertifikatsarbeit/data/elections/je-d-17.02.06.01_KANTON_Kantonale_Regierungswahlen.xlsx", 
-                     sheet = 7, 
-                     skip = 1,   # Header ist Zeile 2
-                     n_max = 0) %>%
-  names()
-
-# Lücken im Header anpassen (i.e. erste Spalten benennen)
-tmp_header <- c("Kanton", tmp_header)
-cat(paste0('"', tmp_header, '"', ","), sep = "\n")
-
-tmp_name_map <- c("Kanton"        = "Kanton",
-                  "Wahljahr 1)"    = "Wahljahr",
-                  "FDP 2)"         = "FDP",
-                  "SP"            = "SP",
-                  "SVP"           = "SVP",
-                  "LP 2)"          = "LPS",
-                  "EVP"           = "EVP",
-                  "CSP"           = "CSP",
-                  "GLP"           = "GLP",
-                  "Die Mitte 3)"   = "Mitte",
-                  "CVP 3)"         = "CVP",
-                  "BDP 3)"         = "BDP",
-                  "PdA"           = "PdA",
-                  "PSA"           = "PSA",
-                  "Grüne 5)"       = "Grüne",
-                  "FGA"           = "FGA",
-                  "Sol."          = "Sol.",
-                  "Lega"          = "Lega",
-                  "MCG (MCR)"     = "MCR",
-                  "Übrige 4)"      = "Übrige",
-                  "Total"         = "Total")
-
-# Automatisch ersetzen
-tmp_header_neu <- ifelse(tmp_header %in% names(tmp_name_map),
-                     tmp_name_map[tmp_header],
-                     tmp_header)
-
-print(tmp_header_neu)
-
-# Daten ab Zeile 4 importieren
-elec_kantonsregierung_raw <- read_excel("~/CAS/Zertifikatsarbeit/data/elections/je-d-17.02.06.01_KANTON_Kantonale_Regierungswahlen.xlsx", 
-                 sheet = 7, 
-                 skip = 3,         # überspringt die ersten 3 Zeilen
-                 col_names = tmp_header_neu)
-
-# Schritt 4: Nur Zeilen behalten, in denen "Wahljahr" nicht NA ist
-elec_kantonsregierung_2019 <- elec_kantonsregierung_raw  %>%
-  filter(!is.na(Wahljahr)) %>%
-  select(Kanton, where(~ {x <- suppressWarnings(as.numeric(.x))
-    sum(x, na.rm = TRUE) > 0}))
-
-# Ergebnis anzeigen
-print(elec_kantonsregierung_2019)
-```
-
-##### Sheets konsolidieren & Change log erstellen
-
-```{r}
-
-# Alle Dataframes in Liste packen
-df_list <- list(elec_kantonsregierung_2019,
-                elec_kantonsregierung_2020,
-                elec_kantonsregierung_2021,
-                elec_kantonsregierung_2022,
-                elec_kantonsregierung_2023,
-                elec_kantonsregierung_2024,
-                elec_kantonsregierung_2025)
-
-# Alle Dataframes zusammenführen (Vereinigung aller Spalten)
-df_all <- bind_rows(df_list)
-
-# Filter auf relevante Wahljahre setzen (2015, da Legislatur 4-5 Jahre dauert und später der Zeitraum ab 2019 geprüft wird)
-df_all <- df_all %>%
-  filter(Wahljahr >= 2015, Wahljahr <= 2025)
-
-# Hilfsfuntion um alle Einträge in numerische umzuwandeln
-make_numeric <- function(x) suppressWarnings(as.numeric(x))
-
-# Funktion auf alle Spalten ausser Kanton & Wahljahr anwenden.
-df_all <- df_all %>%
-  mutate(across(-c(Kanton, Wahljahr), make_numeric))
-
-# Pro Kanton+Wahljahr auf eine Zeile reduzieren
-df_all <- df_all %>%
-  group_by(Kanton, Wahljahr) %>%
-  summarise(across(everything(), ~ coalesce(last(na.omit(.)), NA_real_)), .groups = "drop")
-
-# Alle Kantone und Wahljahre eruieren/bestimmen, die in den Daten vorkommen
-vektor_kanton <- unique(df_all$Kanton)
-vektor_wahljahr <- 2015:2025
-
-# Vollständigen Grid erzeugen
-df_grid <- expand_grid(Kanton = vektor_kanton,
-                       Wahljahr = vektor_wahljahr)
-
-# Mit den Daten verknüpfen
-df_all <- left_join(df_grid,
-                    df_all,
-                    by = c("Kanton", "Wahljahr"))
-
-
-elec_kantonsregierung_final <- df_all %>%
-  arrange(Kanton, Wahljahr) %>%
-  group_by(Kanton) %>%
-  fill(everything(), .direction = "down") %>%
-  ungroup()
-
-
+# Objekt erstellen, mit Sheets als tibble/dataframe
+daten_liste <- setNames(lapply(selected_sheets,
+                               function(sheet) import_election_data (dateipfad,
+                                                                     sheet)),
+                        selected_sheets)
+
+str(daten_liste)
+lapply(daten_liste, summary)
+
+# Alle tibbles zu einem Dataframe zusammenfügen
+elec_kantonale_regierung_final <- bind_rows(daten_liste,
+                                            .id = "Sheet")
+
+# Dataframe als Excel schreiben
+write_xlsx(elec_kantonale_regierung_final,
+           "elec_kantonale_regierung_final.xlsx")
 ```
 
 ### Gemeindeebene
@@ -711,10 +303,6 @@ elec_kantonsregierung_final <- df_all %>%
 -   Parteinamen uneinheitlich aufgrund von Fussnoten
 
 --\> Datenformat "wide" zuerst bereinigen und ins "long" Format bringen
-
-Initialer Code für Einzelimport (ohne Function) - auskommentiert
-
-`` {# {r} #  # ################################################################### # ########## DATEN IMPORTIEREN ###################################### # ########## Header definieren ###################################### # ################################################################### #  #  # # Headerzeilen einlesen # header <- read_excel("~/CAS/Zertifikatsarbeit/data/elections/je-d-17.02.07.01_GEMEINDE_Die Exekutiven der statistischen Städte.xlsx", #                      sheet = 2, #                      skip = 2, #                      n_max = 2, #                      col_names = FALSE) #  # # Daten  einlesen # daten_raw <- read_excel("~/CAS/Zertifikatsarbeit/data/elections/je-d-17.02.07.01_GEMEINDE_Die Exekutiven der statistischen Städte.xlsx", #                     sheet= 2, #                     skip = 5, #                     col_names = FALSE) #  #  # # Die Spaltennamen zusammensetzen # # Leere Zellen in der ersten Headerzeile mit Werten von rechts auffüllen (falls nötig) # header_filled <- as.data.frame(t(header))   # t() "matrix transpose" # header_filled <- fill(header_filled, #                       V1,                   # Header Spalte 1 (V1) auffüllen #                       .direction = "down")  # Werte nach unten übernehmen # header_filled <- t(header_filled)           # t() nochmals (zurück) #  # # Spaltennamen kombinieren # spaltennamen <- paste(header_filled[1, ], #                       header_filled[2, ], #                       sep = "_") # spaltennamen <- gsub("_NA|NA_","", spaltennamen) # Entfernt überflüssige NAs #  # # Spaltennamen zuweisen # colnames(daten_raw) <- spaltennamen #  #  # # Ergebnis: Dataframe mit korrekten Spaltennamen # head(daten_raw) #  #  # ################################################################### # ########## TRANSPONIEREN ########################################## # ########## Gemeindegrössen Cluster ################################ # ################################################################### #  #  # # Cluster Einwohnerzahl als Spalte verwenden # daten_wide <- daten_raw %>% #   mutate(Gemeindegrösse_Cluster =            # Name der neuen Spalte #            ifelse( #              is.na(                          # 4) auf NA prüfen #                suppressWarnings(             # 3) Warnung aus (z.B. "≥ ..Einw..") #                as.numeric(                   # 2) Wert als Zahl #                gsub("'", "", `Kantons-Nr.`)  # 1) Tausender Zeichen (') entfernen #              ))), #              as.character(`Kantons-Nr.`),    # 5) Wert von "Kantons-Nr" oder #              NA_character_ #            )) #  # # Ansicht (Snapshot) nach transponieren (vor auffülen) # daten_wide[1:10,                    # 10 Zeilen #            c(1:10,                  # 10 Spalten + #              ncol(daten_wide))]     # Letzte Spalte #                                     # ncol() von df daten_wide --> Anz. Spalten #                                     # Anzahl Spalten = Position der letzten Spalte #  #  # # 2. Cluster nach unten auffüllen # daten_wide <- daten_wide %>% #   fill(Gemeindegrösse_Cluster, .direction = "down") #  #  # # Ansicht (Snapshot) nach transponieren & auffülen # daten_wide[1:10,                    # 10 Zeilen #            c(1:10,                  # 10 Spalten + #              ncol(daten_wide))]     # Letzte Spalte #                                     # ncol() von df daten_wide --> Anz. Spalten #                                     # Anzahl Spalten = Position der letzten Spalte #  #  # # Herausfiltern von Zeilen mit NICHT-numerischem Wert in "Kantons-Nr." # daten_wide <- daten_wide %>% #     filter(!is.na(suppressWarnings(as.numeric(gsub("'", "", `Kantons-Nr.`))))) #  #  # # Ansicht (Snapshot) nach transponieren & auffüllen # daten_wide[1:10,                    # 10 Zeilen #            c(1:10,                  # 10 Spalten + #              ncol(daten_wide))]     # Letzte Spalte #                                     # ncol() von df daten_wide --> Anz. Spalten #                                     # Anzahl Spalten = Position der letzten Spalte #  # # Ergebnis prüfen # head(daten_wide) #  #  #  # ################################################################### # ########## TRANSPONIEREN ########################################## # ########## Frauen, Männer, Total & Parteien ## #################### # ################################################################### #  #  # daten_wide[1:18,                    # 10 Zeilen #            c(1:18,                  # 10 Spalten + #              ncol(daten_wide))]     # Letzte Spalte #                                     # ncol() von df daten_wide --> Anz. Spalten #                                     # Anzahl Spalten = Position der letzten Spalte #  #  # daten_long <- daten_wide %>% #   mutate(across(matches("(_Frauen|_Männer|_Total)$"), #                 ~ suppressWarnings(as.numeric(.)))) %>%       # Werte numerisch! #            pivot_longer( #              cols = matches("(_Frauen|_Männer|_Total)$"),     # Spaltenauswahl #              names_to = c("Partei", "m_w_Total"),             # Neue Label-Spalte #              names_pattern = "^(.*)_(Frauen|Männer|Total)$",  # RegEx #              values_to = "Wert")                              # Neue Wert-Spalte #  #  # # Ansicht (Snapshot) nach transponieren & auffüllen # daten_long[1:8, #            1:ncol(daten_long)] ``
 
 Dateipfad und gewünschte Sheets festlegen
 
@@ -850,10 +438,9 @@ Function ausführen: Import und Konsolidation
 ```{r}
 
 # Objekt erstellen, mit Sheets als tibble/dataframe
-daten_liste <- setNames(
-  lapply(selected_sheets,
-         function(sheet) importiere_sheet(dateipfad, sheet)),
-  selected_sheets)
+daten_liste <- setNames(lapply(selected_sheets,
+                               function(sheet) importiere_sheet(dateipfad, sheet)),
+                        selected_sheets)
 
 str(daten_liste)
 lapply(daten_liste, summary)
@@ -1143,6 +730,7 @@ datatable(elec_ständerat_final,
 
 ```{r}
 
+#abc
 
 ```
 
@@ -1150,50 +738,51 @@ datatable(elec_ständerat_final,
 
 ```{r}
 
+# 
+# datatable(elec_kantonale_regierung_final,
+#          class = 'nowrap',
+#           filter = 'top',
+#           options = list(pageLength = 7,
+#                          scrollX = TRUE,
+#                          search = list(regex = TRUE,
+#                                        caseInsensitive = TRUE)))
+# 
+# # Änderungen verfolgen
+# # Partei-Spalten bestimmen
+# parteien <- setdiff(names(elec_kantonsregierung_final), c("Kanton", "Wahljahr", "Total"))
+# 
+# # Dataframe nach Kanton und Wahljahr sortieren und ins lange Format bringen
+# df_long <- elec_kantonsregierung_final %>%
+#   arrange(Kanton, Wahljahr) %>%
+#   pivot_longer(
+#     cols = all_of(parteien),
+#     names_to = "Partei",
+#     values_to = "Wert_neu"
+#   ) %>%
+#   group_by(Kanton, Partei) %>%
+#   arrange(Wahljahr, .by_group = TRUE) %>%
+#   mutate(Wert_alt = lag(Wert_neu)) %>%
+#   ungroup()
+# 
+# # Änderungen filtern: Zeige nur, wo sich der Wert geändert hat (und nicht NA)
+# elec_kantonsregierung_changelog <- df_long %>%
+#   filter(!is.na(Wert_alt),
+#          Wert_neu != Wert_alt) %>%
+#   select(Kanton,
+#          Wahljahr,
+#          Partei,
+#          Wert_alt,
+#          Wert_neu)
+# 
+# 
+# datatable(elec_kantonsregierung_changelog,
+#           class = 'nowrap',
+#           filter = 'top',
+#           options = list(pageLength = 7,
+#                          scrollX = TRUE,
+#                          search = list(regex = TRUE,
+#                                        caseInsensitive = TRUE)))
 
-datatable(elec_kantonsregierung_final,
-         class = 'nowrap',
-          filter = 'top',
-          options = list(pageLength = 7,
-                         scrollX = TRUE,
-                         search = list(regex = TRUE,
-                                       caseInsensitive = TRUE)))
-
-# Änderungen verfolgen
-# Partei-Spalten bestimmen
-parteien <- setdiff(names(elec_kantonsregierung_final), c("Kanton", "Wahljahr", "Total"))
-
-# Dataframe nach Kanton und Wahljahr sortieren und ins lange Format bringen
-df_long <- elec_kantonsregierung_final %>%
-  arrange(Kanton, Wahljahr) %>%
-  pivot_longer(
-    cols = all_of(parteien),
-    names_to = "Partei",
-    values_to = "Wert_neu"
-  ) %>%
-  group_by(Kanton, Partei) %>%
-  arrange(Wahljahr, .by_group = TRUE) %>%
-  mutate(Wert_alt = lag(Wert_neu)) %>%
-  ungroup()
-
-# Änderungen filtern: Zeige nur, wo sich der Wert geändert hat (und nicht NA)
-elec_kantonsregierung_changelog <- df_long %>%
-  filter(!is.na(Wert_alt),
-         Wert_neu != Wert_alt) %>%
-  select(Kanton,
-         Wahljahr,
-         Partei,
-         Wert_alt,
-         Wert_neu)
-
-
-datatable(elec_kantonsregierung_changelog,
-          class = 'nowrap',
-          filter = 'top',
-          options = list(pageLength = 7,
-                         scrollX = TRUE,
-                         search = list(regex = TRUE,
-                                       caseInsensitive = TRUE)))
 ```
 
 ### Gemeindeebene
@@ -1202,6 +791,7 @@ datatable(elec_kantonsregierung_changelog,
 
 ```{r}
 
+#abc
 
 
 ```
