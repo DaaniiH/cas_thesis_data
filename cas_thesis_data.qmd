@@ -712,141 +712,9 @@ elec_kantonsregierung_final <- df_all %>%
 
 --\> Datenformat "wide" zuerst bereinigen und ins "long" Format bringen
 
-Initialer Code für Einzelimport (ohne Function)
+Initialer Code für Einzelimport (ohne Function) - auskommentiert
 
-```{r}
-
-#| eval: false
-#| echo: true
-
-
-###################################################################
-########## DATEN IMPORTIEREN ######################################
-########## Header definieren ######################################
-###################################################################
-
-
-# Headerzeilen einlesen
-header <- read_excel("~/CAS/Zertifikatsarbeit/data/elections/je-d-17.02.07.01_GEMEINDE_Die Exekutiven der statistischen Städte.xlsx",
-                     sheet = 2,
-                     skip = 2,
-                     n_max = 2,
-                     col_names = FALSE)
-
-# Daten  einlesen
-daten_raw <- read_excel("~/CAS/Zertifikatsarbeit/data/elections/je-d-17.02.07.01_GEMEINDE_Die Exekutiven der statistischen Städte.xlsx",
-                    sheet= 2,
-                    skip = 5,
-                    col_names = FALSE)
-
-
-# Die Spaltennamen zusammensetzen
-# Leere Zellen in der ersten Headerzeile mit Werten von rechts auffüllen (falls nötig)
-header_filled <- as.data.frame(t(header))   # t() "matrix transpose"
-header_filled <- fill(header_filled,        
-                      V1,                   # Header Spalte 1 (V1) auffüllen
-                      .direction = "down")  # Werte nach unten übernehmen
-header_filled <- t(header_filled)           # t() nochmals (zurück)
-
-# Spaltennamen kombinieren
-spaltennamen <- paste(header_filled[1, ],
-                      header_filled[2, ],
-                      sep = "_")
-spaltennamen <- gsub("_NA|NA_","", spaltennamen) # Entfernt überflüssige NAs
-
-# Spaltennamen zuweisen
-colnames(daten_raw) <- spaltennamen
-
-
-# Ergebnis: Dataframe mit korrekten Spaltennamen
-head(daten_raw)
-
-
-###################################################################
-########## TRANSPONIEREN ##########################################
-########## Gemeindegrössen Cluster ################################
-###################################################################
-
-
-# Cluster Einwohnerzahl als Spalte verwenden
-daten_wide <- daten_raw %>%
-  mutate(Gemeindegrösse_Cluster =            # Name der neuen Spalte
-           ifelse(
-             is.na(                          # 4) auf NA prüfen
-               suppressWarnings(             # 3) Warnung aus (z.B. "≥ ..Einw..")
-               as.numeric(                   # 2) Wert als Zahl 
-               gsub("'", "", `Kantons-Nr.`)  # 1) Tausender Zeichen (') entfernen
-             ))),
-             as.character(`Kantons-Nr.`),    # 5) Wert von "Kantons-Nr" oder 
-             NA_character_
-           ))
-
-# Ansicht (Snapshot) nach transponieren (vor auffülen)
-daten_wide[1:10,                    # 10 Zeilen
-           c(1:10,                  # 10 Spalten +
-             ncol(daten_wide))]     # Letzte Spalte
-                                    # ncol() von df daten_wide --> Anz. Spalten
-                                    # Anzahl Spalten = Position der letzten Spalte
-
-
-# 2. Cluster nach unten auffüllen
-daten_wide <- daten_wide %>%
-  fill(Gemeindegrösse_Cluster, .direction = "down")
-
-
-# Ansicht (Snapshot) nach transponieren & auffülen
-daten_wide[1:10,                    # 10 Zeilen
-           c(1:10,                  # 10 Spalten +
-             ncol(daten_wide))]     # Letzte Spalte
-                                    # ncol() von df daten_wide --> Anz. Spalten
-                                    # Anzahl Spalten = Position der letzten Spalte
-
-
-# Herausfiltern von Zeilen mit NICHT-numerischem Wert in "Kantons-Nr."
-daten_wide <- daten_wide %>%
-    filter(!is.na(suppressWarnings(as.numeric(gsub("'", "", `Kantons-Nr.`)))))
-
-
-# Ansicht (Snapshot) nach transponieren & auffüllen
-daten_wide[1:10,                    # 10 Zeilen
-           c(1:10,                  # 10 Spalten +
-             ncol(daten_wide))]     # Letzte Spalte
-                                    # ncol() von df daten_wide --> Anz. Spalten
-                                    # Anzahl Spalten = Position der letzten Spalte
-
-# Ergebnis prüfen
-head(daten_wide)
-
-
-
-###################################################################
-########## TRANSPONIEREN ##########################################
-########## Frauen, Männer, Total & Parteien ## ####################
-###################################################################
-
-
-daten_wide[1:18,                    # 10 Zeilen
-           c(1:18,                  # 10 Spalten +
-             ncol(daten_wide))]     # Letzte Spalte
-                                    # ncol() von df daten_wide --> Anz. Spalten
-                                    # Anzahl Spalten = Position der letzten Spalte
-
-
-daten_long <- daten_wide %>%
-  mutate(across(matches("(_Frauen|_Männer|_Total)$"),
-                ~ suppressWarnings(as.numeric(.)))) %>%       # Werte numerisch!
-           pivot_longer(
-             cols = matches("(_Frauen|_Männer|_Total)$"),     # Spaltenauswahl
-             names_to = c("Partei", "m_w_Total"),             # Neue Label-Spalte
-             names_pattern = "^(.*)_(Frauen|Männer|Total)$",  # RegEx 
-             values_to = "Wert")                              # Neue Wert-Spalte
-
-
-# Ansicht (Snapshot) nach transponieren & auffüllen
-daten_long[1:8,
-           1:ncol(daten_long)]
-
-```
+`` {# {r} #  # ################################################################### # ########## DATEN IMPORTIEREN ###################################### # ########## Header definieren ###################################### # ################################################################### #  #  # # Headerzeilen einlesen # header <- read_excel("~/CAS/Zertifikatsarbeit/data/elections/je-d-17.02.07.01_GEMEINDE_Die Exekutiven der statistischen Städte.xlsx", #                      sheet = 2, #                      skip = 2, #                      n_max = 2, #                      col_names = FALSE) #  # # Daten  einlesen # daten_raw <- read_excel("~/CAS/Zertifikatsarbeit/data/elections/je-d-17.02.07.01_GEMEINDE_Die Exekutiven der statistischen Städte.xlsx", #                     sheet= 2, #                     skip = 5, #                     col_names = FALSE) #  #  # # Die Spaltennamen zusammensetzen # # Leere Zellen in der ersten Headerzeile mit Werten von rechts auffüllen (falls nötig) # header_filled <- as.data.frame(t(header))   # t() "matrix transpose" # header_filled <- fill(header_filled, #                       V1,                   # Header Spalte 1 (V1) auffüllen #                       .direction = "down")  # Werte nach unten übernehmen # header_filled <- t(header_filled)           # t() nochmals (zurück) #  # # Spaltennamen kombinieren # spaltennamen <- paste(header_filled[1, ], #                       header_filled[2, ], #                       sep = "_") # spaltennamen <- gsub("_NA|NA_","", spaltennamen) # Entfernt überflüssige NAs #  # # Spaltennamen zuweisen # colnames(daten_raw) <- spaltennamen #  #  # # Ergebnis: Dataframe mit korrekten Spaltennamen # head(daten_raw) #  #  # ################################################################### # ########## TRANSPONIEREN ########################################## # ########## Gemeindegrössen Cluster ################################ # ################################################################### #  #  # # Cluster Einwohnerzahl als Spalte verwenden # daten_wide <- daten_raw %>% #   mutate(Gemeindegrösse_Cluster =            # Name der neuen Spalte #            ifelse( #              is.na(                          # 4) auf NA prüfen #                suppressWarnings(             # 3) Warnung aus (z.B. "≥ ..Einw..") #                as.numeric(                   # 2) Wert als Zahl #                gsub("'", "", `Kantons-Nr.`)  # 1) Tausender Zeichen (') entfernen #              ))), #              as.character(`Kantons-Nr.`),    # 5) Wert von "Kantons-Nr" oder #              NA_character_ #            )) #  # # Ansicht (Snapshot) nach transponieren (vor auffülen) # daten_wide[1:10,                    # 10 Zeilen #            c(1:10,                  # 10 Spalten + #              ncol(daten_wide))]     # Letzte Spalte #                                     # ncol() von df daten_wide --> Anz. Spalten #                                     # Anzahl Spalten = Position der letzten Spalte #  #  # # 2. Cluster nach unten auffüllen # daten_wide <- daten_wide %>% #   fill(Gemeindegrösse_Cluster, .direction = "down") #  #  # # Ansicht (Snapshot) nach transponieren & auffülen # daten_wide[1:10,                    # 10 Zeilen #            c(1:10,                  # 10 Spalten + #              ncol(daten_wide))]     # Letzte Spalte #                                     # ncol() von df daten_wide --> Anz. Spalten #                                     # Anzahl Spalten = Position der letzten Spalte #  #  # # Herausfiltern von Zeilen mit NICHT-numerischem Wert in "Kantons-Nr." # daten_wide <- daten_wide %>% #     filter(!is.na(suppressWarnings(as.numeric(gsub("'", "", `Kantons-Nr.`))))) #  #  # # Ansicht (Snapshot) nach transponieren & auffüllen # daten_wide[1:10,                    # 10 Zeilen #            c(1:10,                  # 10 Spalten + #              ncol(daten_wide))]     # Letzte Spalte #                                     # ncol() von df daten_wide --> Anz. Spalten #                                     # Anzahl Spalten = Position der letzten Spalte #  # # Ergebnis prüfen # head(daten_wide) #  #  #  # ################################################################### # ########## TRANSPONIEREN ########################################## # ########## Frauen, Männer, Total & Parteien ## #################### # ################################################################### #  #  # daten_wide[1:18,                    # 10 Zeilen #            c(1:18,                  # 10 Spalten + #              ncol(daten_wide))]     # Letzte Spalte #                                     # ncol() von df daten_wide --> Anz. Spalten #                                     # Anzahl Spalten = Position der letzten Spalte #  #  # daten_long <- daten_wide %>% #   mutate(across(matches("(_Frauen|_Männer|_Total)$"), #                 ~ suppressWarnings(as.numeric(.)))) %>%       # Werte numerisch! #            pivot_longer( #              cols = matches("(_Frauen|_Männer|_Total)$"),     # Spaltenauswahl #              names_to = c("Partei", "m_w_Total"),             # Neue Label-Spalte #              names_pattern = "^(.*)_(Frauen|Männer|Total)$",  # RegEx #              values_to = "Wert")                              # Neue Wert-Spalte #  #  # # Ansicht (Snapshot) nach transponieren & auffüllen # daten_long[1:8, #            1:ncol(daten_long)] ``
 
 Dateipfad und gewünschte Sheets festlegen
 
@@ -952,9 +820,6 @@ importiere_sheet <- function(dateipfad, sheetname) {
     return(daten_long)
 
 }
-
-
-
 ```
 
 Function ausführen: Import der Dateien testen
@@ -978,7 +843,6 @@ for (sheet in selected_sheets) {
     FALSE
   })
 }
-
 ```
 
 Function ausführen: Import und Konsolidation
@@ -986,14 +850,22 @@ Function ausführen: Import und Konsolidation
 ```{r}
 
 # Objekt erstellen, mit Sheets als tibble/dataframe
-daten_liste <- lapply(selected_sheets,
-                      function(sheet) {
-                        importiere_sheet(dateipfad, sheet)})
+daten_liste <- setNames(
+  lapply(selected_sheets,
+         function(sheet) importiere_sheet(dateipfad, sheet)),
+  selected_sheets)
+
 str(daten_liste)
 lapply(daten_liste, summary)
 
 # Alle tibbles zu einem Dataframe zusammenfügen
-elec_gemeinde_exekutiven_final <- bind_rows(daten_liste, .id = "Sheet")
+elec_gemeinde_exekutiven_final <- bind_rows(daten_liste,
+                                            .id = "Sheet") %>% 
+  select(-c('Grössenklasse-Nr.', Grössenklasse))
+
+# Dataframe als Excel schreiben
+write_xlsx(elec_gemeinde_exekutiven_final,
+           "elec_gemeinde_exekutiven_final.xlsx")
 ```
 
 ## Parteilandschaft
