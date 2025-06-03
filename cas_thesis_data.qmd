@@ -204,16 +204,13 @@ print(elec_kantonsparlament)
 
 #### Kantonale Regierung (Exekutive)
 
-```{r}
+Die Kantonalen Abstimmungen finden nicht in allen kantonen gleichzeitg statt. Deshalb genauer die Räte/Konstellation zum Zeitpunkt der jeweiligen Abstimmung zu prüfen.
 
-# TODO Die Kantonalen Abstimmungen finden nicht in allen kantonen gleichzeitg statt. Deshalb genauer die Räte/Konstellation zum Zeitpunkt der jeweiligen Abstimmung zu prüfen.
+Die Struktur der "schön formatierten" Exceldatei lässt keinen "simplen" Import zu.
 
+-   Header ist in Zeile 2 und nicht vollständig
 
-# Struktur der "schön formatierten" Exceldatei lässt keinen "simplen" Import zu.
-# Header ist in Zeile 2 und nicht vollständig
-# Daten (für Kantone) starten in Zeile 4 aber enden auf Zeile 29 bevor es mit Kommentaren und Fussnoten weitergeht 
-
-```
+-   Daten (für Kantone) starten in Zeile 4 aber enden auf Zeile 29 bevor es mit Kommentaren und Fussnoten weitergeht.
 
 ##### Sheet 1: 2025
 
@@ -634,10 +631,10 @@ elec_kantonsregierung_2019 <- elec_kantonsregierung_raw  %>%
     sum(x, na.rm = TRUE) > 0}))
 
 # Ergebnis anzeigen
-print(elec_kantonsregierung_2019)
+view(elec_kantonsregierung_2019)
 ```
 
-##### Sheets konsolidieren
+##### Sheets konsolidieren & Change log erstellen
 
 ```{r}
 
@@ -650,33 +647,37 @@ df_list <- list(elec_kantonsregierung_2019,
                 elec_kantonsregierung_2024,
                 elec_kantonsregierung_2025)
 
-
 # Alle Dataframes zusammenführen (Vereinigung aller Spalten)
 df_all <- bind_rows(df_list)
 
-
+# Filter auf relevante Wahljahre setzen (2015, da Legislatur 4-5 Jahre dauert und später der Zeitraum ab 2019 geprüft wird)
 df_all <- df_all %>%
   filter(Wahljahr >= 2015, Wahljahr <= 2025)
 
-
+# Hilfsfuntion um alle Einträge in numerische umzuwandeln
 make_numeric <- function(x) suppressWarnings(as.numeric(x))
+
+# Funktion auf alle Spalten ausser Kanton & Wahljahr anwenden.
 df_all <- df_all %>%
   mutate(across(-c(Kanton, Wahljahr), make_numeric))
 
-
+# Pro Kanton+Wahljahr auf eine Zeile reduzieren
 df_all <- df_all %>%
   group_by(Kanton, Wahljahr) %>%
   summarise(across(everything(), ~ coalesce(last(na.omit(.)), NA_real_)), .groups = "drop")
 
-# Alle Kantone und Wahljahre, die in den Daten vorkommen
+# Alle Kantone und Wahljahre eruieren/bestimmen, die in den Daten vorkommen
 vektor_kanton <- unique(df_all$Kanton)
 vektor_wahljahr <- 2015:2025
 
 # Vollständigen Grid erzeugen
-df_grid <- expand_grid(Kanton = vektor_kanton, Wahljahr = vektor_wahljahr)
+df_grid <- expand_grid(Kanton = vektor_kanton,
+                       Wahljahr = vektor_wahljahr)
 
 # Mit den Daten verknüpfen
-df_all <- left_join(df_grid, df_all, by = c("Kanton", "Wahljahr"))
+df_all <- left_join(df_grid,
+                    df_all,
+                    by = c("Kanton", "Wahljahr"))
 
 
 elec_kantonsregierung_final <- df_all %>%
@@ -686,34 +687,266 @@ elec_kantonsregierung_final <- df_all %>%
   ungroup()
 
 
-# Änderungen verfolgen
-# Partei-Spalten bestimmen
-parteien <- setdiff(names(elec_kantonsregierung_final), c("Kanton", "Wahljahr", "Total"))
+```
 
-# Dataframe nach Kanton und Wahljahr sortieren und ins lange Format bringen
-df_long <- elec_kantonsregierung_final %>%
-  arrange(Kanton, Wahljahr) %>%
+### Gemeindeebene
+
+#### Exekutiven der statistischen Städte
+
+-   1 Excelsheet / Jahr
+
+-   Header zweizeilig mit Start in Zeile –\> 3 `skip = 2, n_max = 2,`
+
+-   Teils verbundene Header-Zeilen (vertikal/horizontal)
+
+-   Cluster Einwohnerzahlen unterteilt Daten
+
+-   Parteinamen uneinheitlich aufgrund von Fussnoten
+
+--\> Datenformat "wide" zuerst bereinigen und ins "long" Format bringen
+
+```{r}
+
+
+###################################################################
+########## DATEN IMPORTIEREN ######################################
+########## Header definieren ######################################
+###################################################################
+
+
+# Headerzeilen einlesen
+header <- read_excel("~/CAS/Zertifikatsarbeit/data/elections/je-d-17.02.07.01_GEMEINDE_Die Exekutiven der statistischen Städte.xlsx",
+                     skip = 2,
+                     n_max = 2,
+                     col_names = FALSE)
+
+# Daten  einlesen
+daten_raw <- read_excel("~/CAS/Zertifikatsarbeit/data/elections/je-d-17.02.07.01_GEMEINDE_Die Exekutiven der statistischen Städte.xlsx",
+                    skip = 5,
+                    col_names = FALSE)
+
+
+# Die Spaltennamen zusammensetzen
+# Leere Zellen in der ersten Headerzeile mit Werten von rechts auffüllen (falls nötig)
+header_filled <- as.data.frame(t(header))   # t() "matrix transpose"
+header_filled <- fill(header_filled,        
+                      V1,                   # Header Spalte 1 (V1) auffüllen
+                      .direction = "down")  # Werte nach unten übernehmen
+header_filled <- t(header_filled)           # t() nochmals (zurück)
+
+# Spaltennamen kombinieren
+spaltennamen <- paste(header_filled[1, ],
+                      header_filled[2, ],
+                      sep = "_")
+spaltennamen <- gsub("_NA|NA_","", spaltennamen) # Entfernt überflüssige NAs
+
+# Spaltennamen zuweisen
+colnames(daten_raw) <- spaltennamen
+
+
+# Ergebnis: Dataframe mit korrekten Spaltennamen
+head(daten_raw)
+
+
+###################################################################
+########## TRANSPONIEREN ##########################################
+########## Gemeindegrössen Cluster ################################
+###################################################################
+
+
+# Cluster Einwohnerzahl als Spalte verwenden
+daten_wide <- daten_raw %>%
+  mutate(Gemeindegrösse_Cluster =            # Name der neuen Spalte
+           ifelse(
+             is.na(                          # 4) auf NA prüfen
+               suppressWarnings(             # 3) Warnung aus (z.B. "≥ ..Einw..")
+               as.numeric(                   # 2) Wert als Zahl 
+               gsub("'", "", `Kantons-Nr.`)  # 1) Tausender Zeichen (') entfernen
+             ))),
+             as.character(`Kantons-Nr.`),    # 5) Wert von "Kantons-Nr" oder 
+             NA_character_
+           ))
+
+# Ansicht (Snapshot) nach transponieren (vor auffülen)
+daten_wide[1:10,                    # 10 Zeilen
+           c(1:10,                  # 10 Spalten +
+             ncol(daten_wide))]     # Letzte Spalte
+                                    # ncol() von df daten_wide --> Anz. Spalten
+                                    # Anzahl Spalten = Position der letzten Spalte
+
+
+# 2. Cluster nach unten auffüllen
+daten_wide <- daten_wide %>%
+  fill(Gemeindegrösse_Cluster, .direction = "down")
+
+
+# Ansicht (Snapshot) nach transponieren & auffülen
+daten_wide[1:10,                    # 10 Zeilen
+           c(1:10,                  # 10 Spalten +
+             ncol(daten_wide))]     # Letzte Spalte
+                                    # ncol() von df daten_wide --> Anz. Spalten
+                                    # Anzahl Spalten = Position der letzten Spalte
+
+
+# Herausfiltern von Zeilen mit NICHT-numerischem Wert in "Kantons-Nr."
+daten_wide <- daten_wide %>%
+    filter(!is.na(suppressWarnings(as.numeric(gsub("'", "", `Kantons-Nr.`)))))
+
+
+# Ansicht (Snapshot) nach transponieren & auffüllen
+daten_wide[1:10,                    # 10 Zeilen
+           c(1:10,                  # 10 Spalten +
+             ncol(daten_wide))]     # Letzte Spalte
+                                    # ncol() von df daten_wide --> Anz. Spalten
+                                    # Anzahl Spalten = Position der letzten Spalte
+
+# Ergebnis prüfen
+head(daten_wide)
+
+
+
+###################################################################
+########## TRANSPONIEREN ##########################################
+########## Frauen, Männer, Total & Parteien ## ####################
+###################################################################
+
+
+daten_wide[1:18,                    # 10 Zeilen
+           c(1:18,                  # 10 Spalten +
+             ncol(daten_wide))]     # Letzte Spalte
+                                    # ncol() von df daten_wide --> Anz. Spalten
+                                    # Anzahl Spalten = Position der letzten Spalte
+
+
+daten_long <- daten_wide %>%
   pivot_longer(
-    cols = all_of(parteien),
-    names_to = "Partei",
-    values_to = "Wert_neu"
-  ) %>%
-  group_by(Kanton, Partei) %>%
-  arrange(Wahljahr, .by_group = TRUE) %>%
-  mutate(Wert_alt = lag(Wert_neu)) %>%
-  ungroup()
+    cols = matches("(_Frauen|_Männer|_Total)$"),     # Spaltenauswahl/Daten
+    names_to = c("Partei", "m_w_Total"),             # Neue Spalte für Label
+    names_pattern = "^(.*)_(Frauen|Männer|Total)$",  # RegEx 
+    values_to = "Wert")                               # Neue Spalte für Werte
 
-# Änderungen filtern: Zeige nur, wo sich der Wert geändert hat (und nicht NA)
-elec_kantonsregierung_changelog <- df_long %>%
-  filter(!is.na(Wert_alt),
-         Wert_neu != Wert_alt) %>%
-  select(Kanton,
-         Wahljahr,
-         Partei,
-         Wert_alt,
-         Wert_neu)
 
-view(elec_kantonsregierung_changelog)
+# Ansicht (Snapshot) nach transponieren & auffüllen
+daten_long[1:8,
+           1:ncol(daten_long)]
+
+```
+
+```{r}
+
+
+dateipfad <- "~/CAS/Zertifikatsarbeit/data/elections/je-d-17.02.07.01_GEMEINDE_Die Exekutiven der statistischen Städte.xlsx"
+
+# Alle Sheetnamen auslesen
+all_sheets <- excel_sheets(dateipfad)
+
+selected_sheets <- c(2024:2019)
+
+# Für jedes Sheet das lange Dataframe erzeugen und in eine Liste speichern
+daten_liste <- lapply(selected_sheets,
+                      function(sheet) {
+                        importiere_sheet(dateipfad, sheet)})
+
+# Optional: Alle Dataframes zu einem großen Dataframe zusammenfügen
+daten_gesamt <- bind_rows(daten_liste, .id = "Sheet")
+```
+
+```{r}
+
+
+importiere_sheet <- function(dateipfad, sheetname) {
+
+      ###################################################################
+      ########## DATEN IMPORTIEREN ######################################
+      ########## Header definieren ######################################
+      ###################################################################
+      
+      
+      # Headerzeilen einlesen
+      header <- read_excel(dateipfad,
+                           sheet = sheetname,
+                           skip = 2,
+                           n_max = 2,
+                           col_names = FALSE)
+      
+      # Daten  einlesen
+      daten_raw <- read_excel(dateipfad,
+                              sheet = sheetname,
+                              skip = 5,
+                              col_names = FALSE)
+      
+      
+      # Die Spaltennamen zusammensetzen
+      # Leere Zellen in der ersten Headerzeile mit Werten von rechts auffüllen             (falls nötig)
+      header_filled <- as.data.frame(t(header))   # t() "matrix transpose"
+      header_filled <- fill(header_filled,        
+                            V1,                   # Header Spalte 1 (V1) auffüllen
+                            .direction = "down")  # Werte nach unten übernehmen
+      header_filled <- t(header_filled)           # t() nochmals (zurück)
+      
+      # Spaltennamen kombinieren
+      spaltennamen <- paste(header_filled[1, ],
+                            header_filled[2, ],
+                            sep = "_")
+      spaltennamen <- gsub("_NA|NA_","", spaltennamen) # Entfernt überflüssige NAs
+      
+      # Spaltennamen zuweisen
+      colnames(daten_raw) <- spaltennamen
+      
+      
+      ###################################################################
+      ########## TRANSPONIEREN ##########################################
+      ########## Gemeindegrössen Cluster ################################
+      ###################################################################
+      
+      
+      # Cluster Einwohnerzahl als Spalte verwenden
+      daten_wide <- daten_raw %>%
+        mutate(Gemeindegrösse_Cluster =        # Name der neuen Spalte
+                 ifelse(
+                   is.na(                      # 4) auf NA prüfen
+                     suppressWarnings(         # 3) Warnung aus (z.B. "≥ ..Einw..")
+                     as.numeric(                   # 2) Wert als Zahl 
+                     gsub("'", "", `Kantons-Nr.`)  # 1) Tausender Zeichen (')                                                              entfernen
+                   ))),
+                   as.character(`Kantons-Nr.`),    # 5) Wert von "Kantons-Nr" oder 
+                   NA_character_
+                 ))  %>%
+        fill(Gemeindegrösse_Cluster,
+             .direction = "down") %>%              # Cluster nach unten auffüllen
+        filter(!is.na(suppressWarnings(
+          as.numeric(gsub("'", "", `Kantons-Nr.`))))) # Herausfiltern von Zeilen                                                           mit NICHT-numerischem Wert
+    
+    
+    # Ansicht (Snapshot) nach transponieren
+    daten_wide[1:10,                    # 10 Zeilen
+               c(1:10,                  # 10 Spalten +
+                 ncol(daten_wide))]     # Letzte Spalte
+                                        # ncol() von df daten_wide --> Anz. Spalten
+                                        # Anzahl Spalten = Position letzte Spalte
+    
+    
+    
+    ###################################################################
+    ########## TRANSPONIEREN ##########################################
+    ########## Frauen, Männer, Total & Parteien ## ####################
+    ###################################################################
+    
+    
+    
+    daten_long <- daten_wide %>%
+      pivot_longer(
+        cols = matches("(_Frauen|_Männer|_Total)$"),     # Spaltenauswahl/Daten
+        names_to = c("Partei", "m_w_Total"),             # Neue Spalte für Label
+        names_pattern = "^(.*)_(Frauen|Männer|Total)$",  # RegEx 
+        values_to = "Wert")                               # Neue Spalte für Werte
+    
+    
+    return(daten_long)
+
+}
+
+
 ```
 
 ## Parteilandschaft
@@ -989,6 +1222,56 @@ datatable(elec_ständerat_final,
 #### Kantonsregierung
 
 ```{r}
+
+
+datatable(elec_kantonsregierung_final,
+          filter = 'top',
+          options = list(pageLength = 7,
+          search = list(regex = TRUE,
+                        caseInsensitive = TRUE)))
+
+
+# Änderungen verfolgen
+# Partei-Spalten bestimmen
+parteien <- setdiff(names(elec_kantonsregierung_final), c("Kanton", "Wahljahr", "Total"))
+
+# Dataframe nach Kanton und Wahljahr sortieren und ins lange Format bringen
+df_long <- elec_kantonsregierung_final %>%
+  arrange(Kanton, Wahljahr) %>%
+  pivot_longer(
+    cols = all_of(parteien),
+    names_to = "Partei",
+    values_to = "Wert_neu"
+  ) %>%
+  group_by(Kanton, Partei) %>%
+  arrange(Wahljahr, .by_group = TRUE) %>%
+  mutate(Wert_alt = lag(Wert_neu)) %>%
+  ungroup()
+
+# Änderungen filtern: Zeige nur, wo sich der Wert geändert hat (und nicht NA)
+elec_kantonsregierung_changelog <- df_long %>%
+  filter(!is.na(Wert_alt),
+         Wert_neu != Wert_alt) %>%
+  select(Kanton,
+         Wahljahr,
+         Partei,
+         Wert_alt,
+         Wert_neu)
+
+
+datatable(elec_kantonsregierung_changelog,
+          filter = 'top',
+          options = list(pageLength = 7,
+          search = list(regex = TRUE,
+                        caseInsensitive = TRUE)))
+```
+
+### Gemeindeebene
+
+#### Gemeinde
+
+```{r}
+
 
 
 ```
