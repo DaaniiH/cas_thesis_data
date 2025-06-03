@@ -13,11 +13,12 @@ format:
     code-summary: "Code anzeigen" # Optional, Text für den Aufklapp-Link
     code-tools: true              # Optional, Toolbar für Code-Chunks
     number-sections: true
+    max-width: none
 editor: visual
 editor_options: 
   chunk_output_type: console
-theme: darkly
 number-sections: true
+theme: bootstrap
 ---
 
 # Libraries
@@ -49,6 +50,8 @@ library(DescTools)
 
 ### Parteinamen
 
+Die verschiedenen Quellen verwenden teils unteschiedliche Parteibezeichnungen. Zur Vereinheitlichung wird deshalb initial eine Lookup Tabelle geladen.
+
 ```{r}
 
 # Dataframe bilden aus zwei Vektoren
@@ -69,10 +72,12 @@ parteinamen <- parteinamen[, c("p_kuerzel", "kuerzel", "name")]
 
 # Anzeige mit datatable()
 datatable(parteinamen,
+          class = 'nowrap',
           filter = 'top',
           options = list(pageLength = 7,
-          search = list(regex = TRUE,
-                        caseInsensitive = TRUE)))
+                         scrollX = TRUE,
+                         search = list(regex = TRUE,
+                                       caseInsensitive = TRUE)))
 ```
 
 ## Abstimmungen
@@ -88,10 +93,12 @@ voting_raw <- read_delim("~/CAS/Zertifikatsarbeit/data/votes/abstimmungen_swissv
 
 # TODO evt. nur random sample berechnen auf grund Grösse...
 datatable(voting_raw,
+          class = 'nowrap',
           filter = 'top',
           options = list(pageLength = 7,
-          search = list(regex = TRUE,
-                        caseInsensitive = TRUE)))
+                         scrollX = TRUE,
+                         search = list(regex = TRUE,
+                                       caseInsensitive = TRUE)))
 
 ```
 
@@ -631,7 +638,7 @@ elec_kantonsregierung_2019 <- elec_kantonsregierung_raw  %>%
     sum(x, na.rm = TRUE) > 0}))
 
 # Ergebnis anzeigen
-view(elec_kantonsregierung_2019)
+print(elec_kantonsregierung_2019)
 ```
 
 ##### Sheets konsolidieren & Change log erstellen
@@ -705,7 +712,12 @@ elec_kantonsregierung_final <- df_all %>%
 
 --\> Datenformat "wide" zuerst bereinigen und ins "long" Format bringen
 
+Initialer Code für Einzelimport (ohne Function)
+
 ```{r}
+
+#| eval: false
+#| echo: true
 
 
 ###################################################################
@@ -716,12 +728,14 @@ elec_kantonsregierung_final <- df_all %>%
 
 # Headerzeilen einlesen
 header <- read_excel("~/CAS/Zertifikatsarbeit/data/elections/je-d-17.02.07.01_GEMEINDE_Die Exekutiven der statistischen Städte.xlsx",
+                     sheet = 2,
                      skip = 2,
                      n_max = 2,
                      col_names = FALSE)
 
 # Daten  einlesen
 daten_raw <- read_excel("~/CAS/Zertifikatsarbeit/data/elections/je-d-17.02.07.01_GEMEINDE_Die Exekutiven der statistischen Städte.xlsx",
+                    sheet= 2,
                     skip = 5,
                     col_names = FALSE)
 
@@ -819,11 +833,13 @@ daten_wide[1:18,                    # 10 Zeilen
 
 
 daten_long <- daten_wide %>%
-  pivot_longer(
-    cols = matches("(_Frauen|_Männer|_Total)$"),     # Spaltenauswahl/Daten
-    names_to = c("Partei", "m_w_Total"),             # Neue Spalte für Label
-    names_pattern = "^(.*)_(Frauen|Männer|Total)$",  # RegEx 
-    values_to = "Wert")                               # Neue Spalte für Werte
+  mutate(across(matches("(_Frauen|_Männer|_Total)$"),
+                ~ suppressWarnings(as.numeric(.)))) %>%       # Werte numerisch!
+           pivot_longer(
+             cols = matches("(_Frauen|_Männer|_Total)$"),     # Spaltenauswahl
+             names_to = c("Partei", "m_w_Total"),             # Neue Label-Spalte
+             names_pattern = "^(.*)_(Frauen|Männer|Total)$",  # RegEx 
+             values_to = "Wert")                              # Neue Wert-Spalte
 
 
 # Ansicht (Snapshot) nach transponieren & auffüllen
@@ -832,27 +848,18 @@ daten_long[1:8,
 
 ```
 
-```{r}
+Dateipfad und gewünschte Sheets festlegen
 
+```{r}
 
 dateipfad <- "~/CAS/Zertifikatsarbeit/data/elections/je-d-17.02.07.01_GEMEINDE_Die Exekutiven der statistischen Städte.xlsx"
 
-# Alle Sheetnamen auslesen
-all_sheets <- excel_sheets(dateipfad)
-
-selected_sheets <- c(2024:2019)
-
-# Für jedes Sheet das lange Dataframe erzeugen und in eine Liste speichern
-daten_liste <- lapply(selected_sheets,
-                      function(sheet) {
-                        importiere_sheet(dateipfad, sheet)})
-
-# Optional: Alle Dataframes zu einem großen Dataframe zusammenfügen
-daten_gesamt <- bind_rows(daten_liste, .id = "Sheet")
+selected_sheets <- c("2024", "2023", "2022","2021","2020","2019") 
 ```
 
-```{r}
+Function für den Import der Gemeindedaten
 
+```{r}
 
 importiere_sheet <- function(dateipfad, sheetname) {
 
@@ -863,21 +870,21 @@ importiere_sheet <- function(dateipfad, sheetname) {
       
       
       # Headerzeilen einlesen
-      header <- read_excel(dateipfad,
-                           sheet = sheetname,
-                           skip = 2,
-                           n_max = 2,
-                           col_names = FALSE)
+      header <- suppressMessages(read_excel(dateipfad,
+                   sheet = sheetname,
+                   skip = 2,
+                   n_max = 2,
+                   col_names = FALSE))
       
       # Daten  einlesen
-      daten_raw <- read_excel(dateipfad,
+      daten_raw <- suppressMessages(read_excel(dateipfad,
                               sheet = sheetname,
                               skip = 5,
-                              col_names = FALSE)
+                              col_names = FALSE))
       
       
       # Die Spaltennamen zusammensetzen
-      # Leere Zellen in der ersten Headerzeile mit Werten von rechts auffüllen             (falls nötig)
+      # Leere Zellen in 1. Headerzeile mit Werten von rechts auffüllen wenn leer/NA
       header_filled <- as.data.frame(t(header))   # t() "matrix transpose"
       header_filled <- fill(header_filled,        
                             V1,                   # Header Spalte 1 (V1) auffüllen
@@ -902,15 +909,15 @@ importiere_sheet <- function(dateipfad, sheetname) {
       
       # Cluster Einwohnerzahl als Spalte verwenden
       daten_wide <- daten_raw %>%
-        mutate(Gemeindegrösse_Cluster =        # Name der neuen Spalte
+        mutate(Gemeindegrösse_Cluster =             # Name der neuen Spalte
                  ifelse(
-                   is.na(                      # 4) auf NA prüfen
-                     suppressWarnings(         # 3) Warnung aus (z.B. "≥ ..Einw..")
-                     as.numeric(                   # 2) Wert als Zahl 
-                     gsub("'", "", `Kantons-Nr.`)  # 1) Tausender Zeichen (')                                                              entfernen
+                   is.na(                           # 4) auf NA prüfen
+                     suppressWarnings(        # 3) Warnung aus (z.B. "≥ ..Einw..")
+                     as.numeric(                    # 2) Wert als Zahl 
+                     gsub("'", "", `Kantons-Nr.`)   # 1) Tausender Zeichen (')                                                              entfernen
                    ))),
-                   as.character(`Kantons-Nr.`),    # 5) Wert von "Kantons-Nr" oder 
-                   NA_character_
+                   as.character(`Kantons-Nr.`),     # 5) Wert von "Kantons-Nr" 
+                   NA_character_                    #    sonst NA   
                  ))  %>%
         fill(Gemeindegrösse_Cluster,
              .direction = "down") %>%              # Cluster nach unten auffüllen
@@ -935,18 +942,58 @@ importiere_sheet <- function(dateipfad, sheetname) {
     
     
     daten_long <- daten_wide %>%
-      pivot_longer(
-        cols = matches("(_Frauen|_Männer|_Total)$"),     # Spaltenauswahl/Daten
-        names_to = c("Partei", "m_w_Total"),             # Neue Spalte für Label
-        names_pattern = "^(.*)_(Frauen|Männer|Total)$",  # RegEx 
-        values_to = "Wert")                               # Neue Spalte für Werte
-    
+      mutate(across(matches("(_Frauen|_Männer|_Total)$"),
+                    ~ suppressWarnings(as.numeric(.)))) %>%     # Werte numerisch
+      pivot_longer(cols = matches("(_Frauen|_Männer|_Total)$"), # Spaltenauswahl
+                   names_to = c("Partei", "m_w_Total"),         # Neue Label-Spalte
+                   names_pattern = "^(.*)_(Frauen|Männer|Total)$",  # RegEx
+                   values_to = "Wert")                          # Neue Wert-Spalte
     
     return(daten_long)
 
 }
 
 
+
+```
+
+Function ausführen: Import der Dateien testen
+
+```{r}
+
+for (sheet in selected_sheets) {
+  cat("\n-----------------------------\n")
+  cat("Versuche Sheet:", sheet, "\n")
+  result <- tryCatch({
+    dat <- importiere_sheet(dateipfad, sheet)
+    cat("Sheet erfolgreich eingelesen:", sheet, "\n")
+    # Zusammenfassung:
+    cat("Anzahl Zeilen:", nrow(dat), "\n")
+    cat("Anzahl Spalten:", ncol(dat), "\n")
+    cat("Spaltennamen (erste 15):", paste(names(dat)[1:min(15, ncol(dat))], collapse = ", "), "\n")
+    TRUE
+  }, error = function(e) {
+    cat("Fehler beim Einlesen von Sheet:", sheet, "\n")
+    cat("Fehlermeldung:", e$message, "\n")
+    FALSE
+  })
+}
+
+```
+
+Function ausführen: Import und Konsolidation
+
+```{r}
+
+# Objekt erstellen, mit Sheets als tibble/dataframe
+daten_liste <- lapply(selected_sheets,
+                      function(sheet) {
+                        importiere_sheet(dateipfad, sheet)})
+str(daten_liste)
+lapply(daten_liste, summary)
+
+# Alle tibbles zu einem Dataframe zusammenfügen
+elec_gemeinde_exekutiven_final <- bind_rows(daten_liste, .id = "Sheet")
 ```
 
 ## Parteilandschaft
@@ -1055,11 +1102,12 @@ paste(grep("^p-", names(voting), value = TRUE), collapse = ", ")
 
 # Anzeige mit datatable()
 datatable(elec_nationalrat,
+          class = 'nowrap',
           filter = 'top',
           options = list(pageLength = 7,
-          search = list(regex = TRUE,
-                        caseInsensitive = TRUE)))
-
+                         scrollX = TRUE,
+                         search = list(regex = TRUE,
+                                       caseInsensitive = TRUE)))
 
 # Fehlende Werte (NA), Klassen und Levels prüfen
 Abstract(elec_nationalrat)
@@ -1076,10 +1124,12 @@ elec_nationalrat_reduced <- elec_nationalrat %>%
   mutate(value = 1)
 
 datatable(elec_nationalrat_reduced,
+          class = 'nowrap',
           filter = 'top',
           options = list(pageLength = 7,
-          search = list(regex = TRUE,
-                        caseInsensitive = TRUE)))
+                         scrollX = TRUE,
+                         search = list(regex = TRUE,
+                                       caseInsensitive = TRUE)))
 
 # Sitze pro Kanton, Partei und Jahr 
     
@@ -1121,12 +1171,12 @@ datatable(elec_nationalrat_reduced,
       arrange(desc(Total))
     
 datatable(elec_nationalrat_final,
+          class = 'nowrap',
           filter = 'top',
           options = list(pageLength = 7,
-          search = list(regex = TRUE,
-                        caseInsensitive = TRUE)))
-
-
+                         scrollX = TRUE,
+                         search = list(regex = TRUE,
+                                       caseInsensitive = TRUE)))
 ```
 
 #### Ständerat
@@ -1138,10 +1188,12 @@ datatable(elec_nationalrat_final,
 
 # Anzeige mit datatable()
 datatable(elec_ständerat,
+          class = 'nowrap',
           filter = 'top',
           options = list(pageLength = 7,
-          search = list(regex = TRUE,
-                        caseInsensitive = TRUE)))
+                         scrollX = TRUE,
+                         search = list(regex = TRUE,
+                                       caseInsensitive = TRUE)))
 
 
 # Fehlende Werte (NA), Klassen und Levels prüfen
@@ -1159,10 +1211,12 @@ elec_ständerat_reduced <- elec_ständerat %>%
   mutate(value = 1)
 
 datatable(elec_ständerat_reduced,
+          class = 'nowrap',
           filter = 'top',
           options = list(pageLength = 7,
-          search = list(regex = TRUE,
-                        caseInsensitive = TRUE)))
+                         scrollX = TRUE,
+                         search = list(regex = TRUE,
+                                       caseInsensitive = TRUE)))
 
 # Sitze pro Kanton, Partei und Jahr 
     
@@ -1203,11 +1257,12 @@ datatable(elec_ständerat_reduced,
       arrange(desc(Total))
     
 datatable(elec_ständerat_final,
+          class = 'nowrap',
           filter = 'top',
           options = list(pageLength = 7,
-          search = list(regex = TRUE,
-                        caseInsensitive = TRUE)))
-
+                         scrollX = TRUE,
+                         search = list(regex = TRUE,
+                                       caseInsensitive = TRUE)))
 ```
 
 ### Kantonsebene
@@ -1225,11 +1280,12 @@ datatable(elec_ständerat_final,
 
 
 datatable(elec_kantonsregierung_final,
+         class = 'nowrap',
           filter = 'top',
           options = list(pageLength = 7,
-          search = list(regex = TRUE,
-                        caseInsensitive = TRUE)))
-
+                         scrollX = TRUE,
+                         search = list(regex = TRUE,
+                                       caseInsensitive = TRUE)))
 
 # Änderungen verfolgen
 # Partei-Spalten bestimmen
@@ -1260,10 +1316,12 @@ elec_kantonsregierung_changelog <- df_long %>%
 
 
 datatable(elec_kantonsregierung_changelog,
+          class = 'nowrap',
           filter = 'top',
           options = list(pageLength = 7,
-          search = list(regex = TRUE,
-                        caseInsensitive = TRUE)))
+                         scrollX = TRUE,
+                         search = list(regex = TRUE,
+                                       caseInsensitive = TRUE)))
 ```
 
 ### Gemeindeebene
