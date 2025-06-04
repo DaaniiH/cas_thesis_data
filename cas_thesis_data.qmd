@@ -25,11 +25,14 @@ theme: bootstrap
 
 ```{r}
 
+#| label: load_libraries
+
+
 library(readr)
 library(readxl)
-library(pxmake)   # Load PX files
-library(pxR)      # Load PX files
-library(jsonlite) # Load JSON files
+library(pxmake)   # to load PX files
+library(pxR)      # to load PX files
+library(jsonlite) # to load JSON files
 
 library(purrr)
 
@@ -44,15 +47,67 @@ library(DT)       # datatable()
 library(DescTools)
 ```
 
-# Initial data load
+# Functions
+
+```{r}
+
+#| label: load_functions
+
+
+### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###  
+# Duplikate in df finden & als $unique oder $duplicates selektionierbar machen
+find_and_remove_duplicates <- function(df) {
+  list(
+    unique = df[!duplicated(df), ],
+    duplicates = df[duplicated(df) | duplicated(df, fromLast = TRUE), ]
+  )
+}
+
+
+
+### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###  
+# Aktive National- & Ständeräte identifizieren und selektionierbar machen
+
+filter_active <- function(data, von, bis) {
+  von <- as.Date(von)
+  bis <- as.Date(bis)
+  data %>%
+    filter(
+      DateJoining <= bis,                             # Eintritt vor oder am Ende des Zeitraums
+      is.na(DateLeaving) | DateLeaving >= von         # Kein Austritt oder Austritt nach Beginn des Zeitraums
+    )
+}
+
+
+
+
+### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###  
+# Duplikate in df finden & als $unique oder $duplicates selektionierbar machen
+
+```
+
+# **ETL: Extract, Transform, Load** 
+
+-   Daten werden aus verschiedenen Excel-Dateien ausgelesen, unabhängig davon, wie komplex oder verschachtelt sie sind (z. B. mehrere Sheets, verbundene Zellen, unterteilte Datenblöcke).
+
+-   Bei Excel-Dateien mit mehreren Sheets werden Functions angewendet.
+
+-   Header werden identifiziert und ggf. aus mehreren Zeilen zusammengesetzt.
+
+-   Daten werden bereinigt, normalisiert und in das gewünschte Zielformat gebracht (z. B. Wide zu Long, Entfernen von Leerzeilen, Auflösen von verbundenen Zellen, Vereinheitlichung der Spaltenstruktur).
+
+-   Die transformierten Daten werden für die weitere Analyse und Visualisation zu Verfügung gestellt.
 
 ## Lookup tables
 
 ### Parteinamen
 
-Die verschiedenen Quellen verwenden teils unteschiedliche Parteibezeichnungen. Zur Vereinheitlichung wird deshalb initial eine Lookup Tabelle geladen.
+Die verschiedenen Quellen verwenden teils unteschiedliche Parteibezeichnungen. Zur Vereinheitlichung wird deshalb initial eine Lookup Tabelle gebildet.
 
 ```{r}
+
+#| label: load_parties
+
 
 # Dataframe bilden aus zwei Vektoren
 parteinamen <- data.frame(
@@ -61,14 +116,19 @@ parteinamen <- data.frame(
   name = c("Freisinnig-demokratische Partei (FDP.Die Liberalen)", "Sozialdemokratische Partei", "Schweizerische Volkspartei (bis 1936 Parolen der BGB Bern)", "Die Mitte", "Evangelische Volkspartei", "Grüne Partei der Schweiz", "Grünliberale Partei", "Christlichsoziale Partei der Schweiz (von der CVP unabhängige CSP)", "Partei der Arbeit", "Schweizer Demokraten", "Eidgenössisch-Demokratische Union", "Autopartei", "Lega dei Ticinesi", "Katholische Volkspartei", "Mouvement Citoyens Genevois", "Christlichdemokratische Volkspartei", "Bürgerlich-Demokratische Partei", "Liberale Partei der Schweiz", "Landesring der Unabhängigen", "Progressive Organisationen der Schweiz", "Schweizerische Republikanische Bewegung", "Economiesuisse (bis 15.9.2000: Schweizerischer Handels- und Industrieverein SHIV (Vorort))", "Schweizerischer Gewerbeverband", "Schweizer Bauernverband", "Schweizerischer Gewerkschaftsbund", "Travail.Suisse (bis 2002: Parolen des Christlichnationalen Gewerkschaftsbunds (CNG); dieser fusionierte per 1.1.2003 mit der VSA zu Travail.Suisse)", "Schweizerischer Arbeitgeberverband (bis 1996: Zentralverband Schweizerischer Arbeitgeber-Organisationen ZSAO)", "Vereinigung schweizerischer Angestelltenverbände", "Verband des Personals öffentlicher Dienste", "Verband öffentlicher Verkehr", "Touring Club Schweiz", "Verkehrs-Club der Schweiz", "Automobil Club der Schweiz", "Schweizer Bischofskonferenz", "Schweizerischer Städteverband", "Schweizerischer Gemeindeverband", "Konferenz der Kantonsregierungen", "Konferenz der kantonalen Justiz- und Polizeidirektoren", "Schweizerische Gesundheitsdirektorenkonferenz", "Konferenz der kantonalen Landwirtschaftsdirektoren"),
   stringsAsFactors = FALSE)
 
-# Neue Spalte mit "p-" Präfix für späteren Lookup der Parteiparolen
-parteinamen$p_kuerzel <- paste0("p-", parteinamen$kuerzel) 
 
 # Parteikürzel in Grossbuchstaben 
 parteinamen$kuerzel <-  toupper(parteinamen$kuerzel)
 
+
+# Neue Spalte mit "p-" Präfix für späteren Lookup der Parteiparolen
+parteinamen$kuerzel_vote_parole <- paste0("p-", parteinamen$kuerzel) 
+
+
 # Spaltenreihenfolge anpassen: p_kuerzel, kuerzel, name
-parteinamen <- parteinamen[, c("p_kuerzel", "kuerzel", "name")]
+parteinamen <- parteinamen[, c("kuerzel_vote_parole",
+                               "kuerzel",
+                               "name")]
 
 # Anzeige mit datatable()
 datatable(parteinamen,
@@ -80,9 +140,23 @@ datatable(parteinamen,
                                        caseInsensitive = TRUE)))
 ```
 
+Kantone
+
+```{r}
+
+#lookup_elec_nationalrat_canton 
+
+#lookup_elec_nationalrat_parties 
+
+
+```
+
 ## Abstimmungen
 
 ```{r}
+
+#| label: load_voting
+
 
 # Schweizweite Abstimmungen
 voting_raw <- read_delim("~/CAS/Zertifikatsarbeit/data/votes/abstimmungen_swissvotes_DATASET CSV 09-02-2025.csv",
@@ -91,14 +165,119 @@ voting_raw <- read_delim("~/CAS/Zertifikatsarbeit/data/votes/abstimmungen_swissv
                      trim_ws = TRUE,
                      show_col_types = FALSE)
 
-# TODO evt. nur random sample berechnen auf grund Grösse...
-datatable(voting_raw,
+# Datum formatieren
+voting_raw <- voting_raw %>% 
+  mutate(datum = dmy(datum))
+
+# Einträge vor 2020 löschen
+voting_5y <- voting_raw %>%
+  filter(datum >= as.Date("2020-01-01"))
+
+datatable(voting_5y,
           class = 'nowrap',
           filter = 'top',
           options = list(pageLength = 7,
                          scrollX = TRUE,
                          search = list(regex = TRUE,
                                        caseInsensitive = TRUE)))
+
+
+# Parolen Header extrahieren um Parteinamen für Lookup vorzubereiten
+voting_parties <- paste(grep("^p-", names(voting_5y), value = TRUE), collapse = ", ")
+
+
+
+
+voting_5y %>%
+  select(anr,                                              # Spalten-Wahl
+         datum,
+         titel_kurz_d,
+         titel_off_d,
+         rechtsform, #1 Obligatorisches Referendum
+                     #2 Fakultatives Referendum
+                     #3 Volksinitiative
+                     #4 Direkter Gegenentwurf zu einer Volksinitiative
+                     #5 Stichfrage
+         dep,
+         `br-pos`,   #1 Befürwortend
+                     #2 Ablehnend
+                     #3 Keine
+                     #8 Vorzug für den Gegenentwurf (bei Stichfragen)
+                     #9 Vorzug für die Volksinitiative (bei Stichfragen)
+                     #. Missing
+         legisjahr,
+         `pa-iv`,
+         `bv-pos`,   #1 Befürwortend
+                     #2 Ablehnend
+                     #3 Keine Abstimmungsempfehlung des Parlaments
+                     #8 Vorzug für den Gegenentwurf (bei Stichfragen)
+         `nr-pos`,   #1 Befürwortende Mehrheit im Nationalrat
+                     #2 Ablehnende Mehrheit im Nationalrat
+                     #3 Keine Abstimmungsempfehlung des Nationalrats
+                     #8 Vorzug für den Gegenentwurf (bei Stichfragen)
+         nrja,
+         nrnein,
+         `sr-pos`,   #1 Befürwortende Mehrheit im Ständerat
+                     #2 Ablehnende Mehrheit im Ständerat
+                     #3 Keine Abstimmungsempfehlung des Ständerats
+                     #8 Vorzug für den Gegenentwurf (bei Stichfragen)
+         srja,
+         srnein,
+         # Parteiparolen
+         starts_with("p-"),
+                     #1 Ja-Parole
+                     #2 Nein-Parole
+                     #3 keine Parole abzugeben
+                     #4 empfahl, einen leeren Stimmzettel einzulegen
+                     #5 Stimmfreigabe
+                     #8 Bevorzugung des Gegenentwurfs (bei Stichfrage)
+                     #9 Bevorzugung der Volksinitiative (bei Stichfrage)
+                     #66 Neutral: keine Parole oder Empfehlung auf leer einlegen                        #9999 Organisation existiert nicht
+                     #. Unbekannt
+         # Parteiparolen Kanton / Parteisektion
+         starts_with("p-dev-"),
+                     #1 Ja-Parole
+                     #2 Nein-Parole
+                     #3 keine Parole abzugeben
+                     #4 empfahl, einen leeren Stimmzettel einzulegen
+                     #5 Stimmfreigabe
+                     #8 Bevorzugung des Gegenentwurfs (bei Stichfrage)
+                     #9 Bevorzugung der Volksinitiative (bei Stichfrage)
+                     # [leer] Parole gleich wie Mutterpartei (oder unbekannt)         
+         volk,       #0 Eine Mehrheit der Abstimmenden hat die Vorlage abgelehnt
+                     #1 Eine Mehrheit der Abstimmenden hat die Vorlage angenommen
+                     #8 Bei Stichfragen:  Mehrheit für Gegenentwurfs
+                     #9 Bei Stichfragen:  Mehrheit Volksinitiative
+         stand,
+                     #0 Die Vorlage hat keine Mehrheit der Standesstimmen er-reicht
+                     #1 Die Vorlage hat die Mehrheit der Standesstimmen erreicht
+                     #3 Ständemehr nicht notwendig
+                     #8 Bei Stichfragen: Mehrheit für Gegenentwurf
+                     #9 Bei Stichfragen: Mehrheit für Volksinitiative
+         annahme,    #0 Ablehnung der Vorlage
+                     #1 Annahme der Vorlage
+                     #8 Bei Stichfragen: Gegenentwurf angenommen
+                     #9 Bei Stichfragen: Volksinitiative angenommen
+                     #. Bei Stichfragen: Ergebnis der Stichfrage obsolet
+         berecht,
+         stimmen,
+         bet,
+         leer,
+         ungultig,
+         gultig,
+         volkja,
+         volknein,
+         `volkja-proz`)
+
+
+voting_5y_dates <- voting_5y %>%
+  select(datum) %>%
+  distinct() %>%
+  pull(datum) %>%
+  as.character()
+
+
+
 
 ```
 
@@ -110,20 +289,274 @@ datatable(voting_raw,
 
 ```{r}
 
+#| label: load_nationalrat
+
+
 # Nationalrat: Daten einlesen
 elec_nationalrat  <- read_excel("~/CAS/Zertifikatsarbeit/data/elections/Ratsmitglieder_1848_DE_BUND_NR.xlsx")
 
+# Struktur prüfen
 str(elec_nationalrat)
+
+# Fehlende Werte (NA), Klassen und Levels prüfen
+Abstract(elec_nationalrat)
+PlotMiss(elec_nationalrat)    
+    
+# Duplikate mittels Funktion ermitteln
+elec_nationalrat_duplicates <- find_and_remove_duplicates(elec_nationalrat)
+    # elec_nationalrat_duplicates$unique
+    # elec_nationalrat_duplicates$duplicates
+
+# df mit unique Einträge weiterverwenden 
+elec_nationalrat <- elec_nationalrat_duplicates$unique
+
+  
+# Auf relevante Spalten reduzieren und Datumsformat anpassen
+    # Spaltenüberschriften konkateniert
+    # cat(paste(paste0('"', colnames(elec_nationalrat), '"'),collapse = ",\n"))
+
+elec_nationalrat_final <- elec_nationalrat %>% 
+  select(# "Active",
+         # "FirstName",
+         # "LastName",
+         # "GenderAsString",
+         "CantonName",
+         "CantonAbbreviation",
+         # "CouncilName",
+         # "ParlGroupName",
+         # "ParlGroupAbbreviation",
+         "PartyName",
+         "PartyAbbreviation",
+         # "MaritalStatusText",
+         # "Nationality",
+         # "BirthPlace_City",
+         # "BirthPlace_Canton",
+         # "Mandates",
+         "DateJoining",
+         "DateLeaving",
+         # "Citizenship",
+         # "DateOfBirth",
+         "DateOfDeath") %>% 
+  mutate(DateJoining = dmy(DateJoining),
+         DateLeaving = dmy(DateLeaving),
+         DateOfDeath = dmy(DateOfDeath))  
+
+
+datatable(elec_nationalrat_final,
+          class = 'nowrap',
+          filter = 'top',
+          options = list(pageLength = 7,
+                         scrollX = TRUE,
+                         search = list(regex = TRUE,
+                                       caseInsensitive = TRUE)))
+
+
+
+
+#TODO: in Liste aufnehmen
+# Kantone und Parteien extrahieren für die vereinheitlichung der Namen.
+lookup_elec_nationalrat_canton <- elec_nationalrat_final %>% 
+  select(CantonAbbreviation, CantonName) %>% 
+  distinct()
+
+lookup_elec_nationalrat_parties <- elec_nationalrat_final %>% 
+  select(PartyAbbreviation, PartyName) %>% 
+  distinct()
+
+
+
+
+
+# TODO: Anwenden für kombinierte Liste NR & SR
+
+
+
+#TODO: in Liste aufnehmen
+# Kantone und Parteien extrahieren für die vereinheitlichung der Namen.
+lookup_elec_nationalrat_canton <- elec_nationalrat_final %>% 
+  select(CantonAbbreviation, CantonName) %>% 
+  distinct()
+
+lookup_elec_nationalrat_parties <- elec_nationalrat_final %>% 
+  select(PartyAbbreviation, PartyName) %>% 
+  distinct()
+
+
+# Abstiummungsdatum (voting_5y_dates) als Spalten hinzufügen
+elec_nationalrat_final <- elec_nationalrat_final %>%
+  mutate(!!!setNames(rep(list(NA_integer_), length(voting_5y_dates)), voting_5y_dates))
+
+
+# Ergänzen ob Ratsmitglied zum Zeitpunkt der Abstimmung aktiv war
+elec_nationalrat_final <- elec_nationalrat_final %>%
+  mutate(!!!setNames(
+    lapply(voting_5y_dates, function(datum) {
+        abstimmungsdatum <- as.Date(datum)
+        with(., as.integer(                            # 1 der 0 zurück 
+          DateJoining <= abstimmungsdatum &
+            (is.na(DateLeaving) | DateLeaving >= abstimmungsdatum)
+        ))
+      }),
+      voting_5y_dates))
+
+
+
+
+
+
+
+
+
+# Sitze pro Kanton, Partei und Jahr/Abstimmung
+#     
+#     # long format
+#       df_sum <- elec_nationalrat_final %>%
+#         group_by(CantonAbbreviation, PartyAbbreviation) %>%
+#         summarise(sum_value = sum(value, na.rm = TRUE),
+#                   .groups = "drop")
+#     
+#     # wide format
+#     # Pivotieren: Partei-Spalten erzeugen
+#       df_wide <- df_sum %>%
+#         pivot_wider(names_from = PartyAbbreviation,
+#                     values_from = sum_value,
+#                     values_fill = 0)
+#     
+#     
+#     
+#     # Partei-Spaltennamen extrahieren (ohne Kanton/Jahr)
+#     partei_cols <- setdiff(names(df_wide),
+#                            c("CantonAbbreviation"))
+#     
+#     # Spaltensummen der Parteien berechnen für Sortierung
+#     partei_sums <- colSums(df_wide[partei_cols])
+#     
+#     # Zeilensumme der Kantone/Jahre hinzufügen
+#     df_wide$Total <- rowSums(df_wide[partei_cols])
+#     
+#     
+#     # Parteispalten-Anordnung nach Summe sortieren
+#     sorted_partei <- names(sort(partei_sums,
+#                                 decreasing = TRUE))
+#     
+#     
+#     # Dataframe neu anordnen: Kanton/Jahr,  sortierte und gefilterte Parteien
+#     elec_nationalrat_final <- df_wide[, c(setdiff(names(df_wide),
+#                                                   partei_cols),
+#                                           sorted_partei)] %>% 
+#       arrange(desc(Total))
+# 
+#     
+#         
+# datatable(elec_nationalrat_final,
+#           class = 'nowrap',
+#           filter = 'top',
+#           options = list(pageLength = 7,
+#                          scrollX = TRUE,
+#                          search = list(regex = TRUE,
+#                                        caseInsensitive = TRUE)))
+
+
+
+# write_xlsx(elec_nationalrat,
+#            "elec_nationalrat_final.xlsx")
 ```
 
 #### Ständerat
 
 ```{r}
 
+#| label: load_ständerat
+
+
 # Ständerat: Daten einlesen
 elec_ständerat  <- read_excel("~/CAS/Zertifikatsarbeit/data/elections/Ratsmitglieder_1848_DE_BUND_SR.xlsx")
 
 str(elec_ständerat)
+
+
+# Anzeige mit datatable()
+datatable(elec_ständerat,
+          class = 'nowrap',
+          filter = 'top',
+          options = list(pageLength = 7,
+                         scrollX = TRUE,
+                         search = list(regex = TRUE,
+                                       caseInsensitive = TRUE)))
+
+
+# Fehlende Werte (NA), Klassen und Levels prüfen
+Abstract(elec_ständerat)
+PlotMiss(elec_ständerat)
+
+# Datensatz reduzieren auf Aktive und doppelte Einträge elimnieren
+elec_ständerat_reduced <- elec_ständerat %>%
+  filter(Active == TRUE) %>% 
+  distinct(.keep_all = TRUE) %>% 
+  select(CantonAbbreviation,
+         CantonName,
+         PartyAbbreviation,
+         PartyName) %>% 
+  mutate(value = 1)
+
+datatable(elec_ständerat_reduced,
+          class = 'nowrap',
+          filter = 'top',
+          options = list(pageLength = 7,
+                         scrollX = TRUE,
+                         search = list(regex = TRUE,
+                                       caseInsensitive = TRUE)))
+
+# Sitze pro Kanton, Partei und Jahr 
+    
+    # long format
+      df_sum <- elec_ständerat_reduced %>%
+      group_by(CantonAbbreviation, PartyAbbreviation) %>%
+      summarise(sum_value = sum(value, na.rm = TRUE),
+                .groups = "drop")
+    
+    # wide format
+    # Pivotieren: Partei-Spalten erzeugen
+    df_wide <- df_sum %>%
+      pivot_wider(names_from = PartyAbbreviation,
+                  values_from = sum_value,
+                  values_fill = 0)
+    
+    
+    # Partei-Spaltennamen extrahieren (ohne Kanton/Jahr)
+    partei_cols <- setdiff(names(df_wide),
+                           c("CantonAbbreviation"))
+    
+    # Spaltensummen der Parteien berechnen für Sortierung
+    partei_sums <- colSums(df_wide[partei_cols])
+    
+    # Zeilensumme der Kantone/Jahre hinzufügen
+    df_wide$Total <- rowSums(df_wide[partei_cols])
+    
+    
+    # Parteispalten-Anordnung nach Summe sortieren
+    sorted_partei <- names(sort(partei_sums,
+                                decreasing = TRUE))
+    
+    
+    # Dataframe neu anordnen: Kanton/Jahr,  sortierte und gefilterte Parteien
+    elec_ständerat_final <- df_wide[, c(setdiff(names(df_wide),
+                                                  partei_cols),
+                                        sorted_partei)] %>% 
+      arrange(desc(Total))
+    
+datatable(elec_ständerat_final,
+          class = 'nowrap',
+          filter = 'top',
+          options = list(pageLength = 7,
+                         scrollX = TRUE,
+                         search = list(regex = TRUE,
+                                       caseInsensitive = TRUE)))
+
+
+
+# write_xlsx(elec_ständerat,
+#            "elec_ständerat_final.xlsx")
 ```
 
 ### Kantonsebene
@@ -280,12 +713,25 @@ str(daten_liste)
 lapply(daten_liste, summary)
 
 # Alle tibbles zu einem Dataframe zusammenfügen
-elec_kantonale_regierung_final <- bind_rows(daten_liste,
-                                            .id = "Sheet")
+elec_kantonale_regierung_combined <- bind_rows(daten_liste,
+                                               .id = "Sheet")
+
+
+datatable(elec_kantonale_regierung_combined,
+          class = 'nowrap',
+          filter = 'top',
+          options = list(pageLength = 7,
+                         scrollX = TRUE,
+                         search = list(regex = TRUE,
+                                       caseInsensitive = TRUE)))
+
+# TODO:
+# Parteinamen bereinigen!
+# finales file: elec_kantonale_regierung_final
 
 # Dataframe als Excel schreiben
-write_xlsx(elec_kantonale_regierung_final,
-           "elec_kantonale_regierung_final.xlsx")
+# write_xlsx(elec_kantonale_regierung_final,
+#            "elec_kantonale_regierung_final.xlsx")
 ```
 
 ### Gemeindeebene
@@ -446,18 +892,35 @@ str(daten_liste)
 lapply(daten_liste, summary)
 
 # Alle tibbles zu einem Dataframe zusammenfügen
-elec_gemeinde_exekutiven_final <- bind_rows(daten_liste,
+elec_gemeinde_exekutiven_combined <- bind_rows(daten_liste,
                                             .id = "Sheet") %>% 
   select(-c('Grössenklasse-Nr.', Grössenklasse))
 
+
+
+datatable(elec_gemeinde_exekutiven_combined,
+          class = 'nowrap',
+          filter = 'top',
+          options = list(pageLength = 7,
+                         scrollX = TRUE,
+                         search = list(regex = TRUE,
+                                       caseInsensitive = TRUE)))
+
+# TODO:
+# Parteinamen bereinigen!
+# finales file: elec_gemeinde_exekutiven_final
+
+
 # Dataframe als Excel schreiben
-write_xlsx(elec_gemeinde_exekutiven_final,
-           "elec_gemeinde_exekutiven_final.xlsx")
+# write_xlsx(elec_gemeinde_exekutiven_final,
+#            "elec_gemeinde_exekutiven_final.xlsx")
 ```
 
 ## Parteilandschaft
 
 ```{r}
+
+#| label: load_parties_rating
 
 parties_rating <- read_excel("~/CAS/Zertifikatsarbeit/data/parties_economic_socio-political_rating.xlsx",
                              sheet = "matrix_eco-socio_enhanced")
@@ -469,84 +932,12 @@ parties_rating <- read_excel("~/CAS/Zertifikatsarbeit/data/parties_economic_soci
 
 ```{r}
 
-voting <- voting_raw %>%
-  mutate(datum = as.Date(datum, format = "%d.%m.%Y")) %>%  # Format-Umwandlung
-  filter(datum >= as.Date("2019-12-31")) %>%               # Vergleich
-  select(anr,                                              # Spalten-Wahl
-         datum,
-         titel_kurz_d,
-         titel_off_d,
-         rechtsform, #1 Obligatorisches Referendum
-                     #2 Fakultatives Referendum
-                     #3 Volksinitiative
-                     #4 Direkter Gegenentwurf zu einer Volksinitiative
-                     #5 Stichfrage
-         dep,
-         `br-pos`,   #1 Befürwortend
-                     #2 Ablehnend
-                     #3 Keine
-                     #8 Vorzug für den Gegenentwurf (bei Stichfragen)
-                     #9 Vorzug für die Volksinitiative (bei Stichfragen)
-                     #. Missing
-         legisjahr,
-         `pa-iv`,
-         `bv-pos`,   #1 Befürwortend
-                     #2 Ablehnend
-                     #3 Keine Abstimmungsempfehlung des Parlaments
-                     #8 Vorzug für den Gegenentwurf (bei Stichfragen)
-         `nr-pos`,   #1 Befürwortende Mehrheit im Nationalrat
-                     #2 Ablehnende Mehrheit im Nationalrat
-                     #3 Keine Abstimmungsempfehlung des Nationalrats
-                     #8 Vorzug für den Gegenentwurf (bei Stichfragen)
-         nrja,
-         nrnein,
-         `sr-pos`,   #1 Befürwortende Mehrheit im Ständerat
-                     #2 Ablehnende Mehrheit im Ständerat
-                     #3 Keine Abstimmungsempfehlung des Ständerats
-                     #8 Vorzug für den Gegenentwurf (bei Stichfragen)
-         srja,
-         srnein,
-         starts_with("p-"),
-                     #1 Ja-Parole
-                     #2 Nein-Parole
-                     #3 keine Parole abzugeben
-                     #4 empfahl, einen leeren Stimmzettel einzulegen
-                     #5 Stimmfreigabe
-                     #8 Bevorzugung des Gegenentwurfs (bei Stichfrage)
-                     #9 Bevorzugung der Volksinitiative (bei Stichfrage)
-                     #66 Neutral: keine Parole oder Empfehlung auf leer einlegen                        #9999 Organisation existiert nicht
-                     #. Unbekannt
-         volk,       #0 Eine Mehrheit der Abstimmenden hat die Vorlage abgelehnt
-                     #1 Eine Mehrheit der Abstimmenden hat die Vorlage angenommen
-                     #8 Bei Stichfragen:  Mehrheit für Gegenentwurfs
-                     #9 Bei Stichfragen:  Mehrheit Volksinitiative
-         stand,
-                     #0 Die Vorlage hat keine Mehrheit der Standesstimmen er-reicht
-                     #1 Die Vorlage hat die Mehrheit der Standesstimmen erreicht
-                     #3 Ständemehr nicht notwendig
-                     #8 Bei Stichfragen: Mehrheit für Gegenentwurf
-                     #9 Bei Stichfragen: Mehrheit für Volksinitiative
-         annahme,    #0 Ablehnung der Vorlage
-                     #1 Annahme der Vorlage
-                     #8 Bei Stichfragen: Gegenentwurf angenommen
-                     #9 Bei Stichfragen: Volksinitiative angenommen
-                     #. Bei Stichfragen: Ergebnis der Stichfrage obsolet
-         berecht,
-         stimmen,
-         bet,
-         leer,
-         ungultig,
-         gultig,
-         volkja,
-         volknein,
-         `volkja-proz`)
-
 
 ```
 
 ```{r}
-grep("^p-", names(voting), value = TRUE)
-paste(grep("^p-", names(voting), value = TRUE), collapse = ", ")
+
+
 ```
 
 ## Wahlen
@@ -557,7 +948,11 @@ paste(grep("^p-", names(voting), value = TRUE), collapse = ", ")
 
 ```{r}
 
-#TODO Es kann innerhalb der Legislatur Wechsel geben --> Anstelle der heute "Aktiven" ist es deshalb genauer die Räte/Konstellation zum Zeitpunkt der jeweiligen Abstimmung zu prüfen. 
+
+########################################################################
+####################### BACKUP 04.06.2025 ##############################
+########################################################################
+
 
 # Anzeige mit datatable()
 datatable(elec_nationalrat,
@@ -641,6 +1036,13 @@ datatable(elec_nationalrat_final,
 #### Ständerat
 
 ```{r}
+
+
+########################################################################
+####################### BACKUP 04.06.2025 ##############################
+########################################################################
+
+
 
 #TODO Es kann innerhalb der Legislatur Wechsel geben --> Anstelle der heute "Aktiven" ist es deshalb genauer die Räte/Konstellation zum Zeitpunkt der jeweiligen Abstimmung zu prüfen.
 
@@ -726,17 +1128,14 @@ datatable(elec_ständerat_final,
 
 ### Kantonsebene
 
-#### Kantonsparlament
-
-```{r}
-
-#abc
-
-```
-
 #### Kantonsregierung
 
 ```{r}
+
+
+########################################################################
+####################### BACKUP 03.06.2025 ##############################
+########################################################################
 
 # 
 # datatable(elec_kantonale_regierung_final,
@@ -782,17 +1181,6 @@ datatable(elec_ständerat_final,
 #                          scrollX = TRUE,
 #                          search = list(regex = TRUE,
 #                                        caseInsensitive = TRUE)))
-
-```
-
-### Gemeindeebene
-
-#### Gemeinde
-
-```{r}
-
-#abc
-
 
 ```
 
