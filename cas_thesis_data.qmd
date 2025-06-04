@@ -24,7 +24,6 @@ theme: bootstrap
 # Libraries
 
 ```{r}
-
 #| label: load_libraries
 
 
@@ -50,7 +49,6 @@ library(DescTools)
 # Functions
 
 ```{r}
-
 #| label: load_functions
 
 
@@ -86,7 +84,7 @@ filter_active <- function(data, von, bis) {
 
 ```
 
-# **ETL: Extract, Transform, Load** 
+# **ETL: Extract, Transform, Load**
 
 -   Daten werden aus verschiedenen Excel-Dateien ausgelesen, unabhängig davon, wie komplex oder verschachtelt sie sind (z. B. mehrere Sheets, verbundene Zellen, unterteilte Datenblöcke).
 
@@ -105,7 +103,6 @@ filter_active <- function(data, von, bis) {
 Die verschiedenen Quellen verwenden teils unteschiedliche Parteibezeichnungen. Zur Vereinheitlichung wird deshalb initial eine Lookup Tabelle gebildet.
 
 ```{r}
-
 #| label: load_parties
 
 
@@ -154,7 +151,6 @@ Kantone
 ## Abstimmungen
 
 ```{r}
-
 #| label: load_voting
 
 
@@ -288,7 +284,6 @@ voting_5y_dates <- voting_5y %>%
 #### Nationalrat
 
 ```{r}
-
 #| label: load_nationalrat
 
 
@@ -350,54 +345,187 @@ datatable(elec_nationalrat_final,
                          search = list(regex = TRUE,
                                        caseInsensitive = TRUE)))
 
+```
+
+#### Ständerat
+
+```{r}
+#| label: load_ständerat
+
+
+# Ständerat: Daten einlesen
+elec_ständerat  <- read_excel("~/CAS/Zertifikatsarbeit/data/elections/Ratsmitglieder_1848_DE_BUND_SR.xlsx")
+
+# Struktur prüfen
+str(elec_ständerat)
+
+# Fehlende Werte (NA), Klassen und Levels prüfen
+Abstract(elec_ständerat)
+PlotMiss(elec_ständerat)    
+    
+# Duplikate mittels Funktion ermitteln
+elec_ständerat_duplicates <- find_and_remove_duplicates(elec_ständerat)
+    # elec_nationalrat_duplicates$unique
+    # elec_nationalrat_duplicates$duplicates
+
+# df mit unique Einträge weiterverwenden 
+elec_ständerat <- elec_ständerat_duplicates$unique
+
+  
+# Auf relevante Spalten reduzieren und Datumsformat anpassen
+    # Spaltenüberschriften konkateniert
+    # cat(paste(paste0('"', colnames(elec_nationalrat), '"'),collapse = ",\n"))
 
 
 
-#TODO: in Liste aufnehmen
-# Kantone und Parteien extrahieren für die vereinheitlichung der Namen.
-lookup_elec_nationalrat_canton <- elec_nationalrat_final %>% 
-  select(CantonAbbreviation, CantonName) %>% 
-  distinct()
+elec_ständerat_final <- elec_ständerat %>% 
+  select(# "Active",
+         # "FirstName",
+         # "LastName",
+         # "GenderAsString",
+         "CantonName",
+         "CantonAbbreviation",
+         # "CouncilName",
+         # "ParlGroupName",
+         # "ParlGroupAbbreviation",
+         "PartyName",
+         "PartyAbbreviation",
+         # "MaritalStatusText",
+         # "Nationality",
+         # "BirthPlace_City",
+         # "BirthPlace_Canton",
+         # "Mandates",
+         "DateJoining",
+         "DateLeaving",
+         # "Citizenship",
+         # "DateOfBirth",
+         "DateOfDeath") %>% 
+  mutate(DateJoining = dmy(DateJoining),
+         DateLeaving = dmy(DateLeaving),
+         DateOfDeath = dmy(DateOfDeath))
 
-lookup_elec_nationalrat_parties <- elec_nationalrat_final %>% 
-  select(PartyAbbreviation, PartyName) %>% 
-  distinct()
+
+
+# Anzeige mit datatable()
+datatable(elec_ständerat_final,
+          class = 'nowrap',
+          filter = 'top',
+          options = list(pageLength = 7,
+                         scrollX = TRUE,
+                         search = list(regex = TRUE,
+                                       caseInsensitive = TRUE)))
 
 
 
+# Sitze pro Kanton, Partei und Jahr 
+    
+#     # long format
+#       df_sum <- elec_ständerat_reduced %>%
+#       group_by(CantonAbbreviation, PartyAbbreviation) %>%
+#       summarise(sum_value = sum(value, na.rm = TRUE),
+#                 .groups = "drop")
+#     
+#     # wide format
+#     # Pivotieren: Partei-Spalten erzeugen
+#     df_wide <- df_sum %>%
+#       pivot_wider(names_from = PartyAbbreviation,
+#                   values_from = sum_value,
+#                   values_fill = 0)
+#     
+#     
+#     # Partei-Spaltennamen extrahieren (ohne Kanton/Jahr)
+#     partei_cols <- setdiff(names(df_wide),
+#                            c("CantonAbbreviation"))
+#     
+#     # Spaltensummen der Parteien berechnen für Sortierung
+#     partei_sums <- colSums(df_wide[partei_cols])
+#     
+#     # Zeilensumme der Kantone/Jahre hinzufügen
+#     df_wide$Total <- rowSums(df_wide[partei_cols])
+#     
+#     
+#     # Parteispalten-Anordnung nach Summe sortieren
+#     sorted_partei <- names(sort(partei_sums,
+#                                 decreasing = TRUE))
+#     
+#     
+#     # Dataframe neu anordnen: Kanton/Jahr,  sortierte und gefilterte Parteien
+#     elec_ständerat_final <- df_wide[, c(setdiff(names(df_wide),
+#                                                   partei_cols),
+#                                         sorted_partei)] %>% 
+#       arrange(desc(Total))
+#     
+# datatable(elec_ständerat_final,
+#           class = 'nowrap',
+#           filter = 'top',
+#           options = list(pageLength = 7,
+#                          scrollX = TRUE,
+#                          search = list(regex = TRUE,
+#                                        caseInsensitive = TRUE)))
 
 
-# TODO: Anwenden für kombinierte Liste NR & SR
+
+# write_xlsx(elec_ständerat,
+#            "elec_ständerat_final.xlsx")
 
 
+```
 
-#TODO: in Liste aufnehmen
-# Kantone und Parteien extrahieren für die vereinheitlichung der Namen.
-lookup_elec_nationalrat_canton <- elec_nationalrat_final %>% 
-  select(CantonAbbreviation, CantonName) %>% 
-  distinct()
+#### National- & Ständerat kombinieren für weiter Bearbeitung 
 
-lookup_elec_nationalrat_parties <- elec_nationalrat_final %>% 
-  select(PartyAbbreviation, PartyName) %>% 
-  distinct()
+```{r}
+#| label: combine_parliament
+
+
+elec_nr_sr_combined <- bind_rows(
+  elec_nationalrat_final %>% mutate(role = "Nationalrat"),
+  elec_ständerat_final %>% mutate(role = "Ständerat")) %>%
+  select(role, everything())
 
 
 # Abstiummungsdatum (voting_5y_dates) als Spalten hinzufügen
-elec_nationalrat_final <- elec_nationalrat_final %>%
-  mutate(!!!setNames(rep(list(NA_integer_), length(voting_5y_dates)), voting_5y_dates))
-
+elec_nr_sr_combined <- elec_nr_sr_combined %>%
+  mutate(!!!setNames(rep(list(NA_integer_),
+                         length(voting_5y_dates)),
+                     voting_5y_dates))
 
 # Ergänzen ob Ratsmitglied zum Zeitpunkt der Abstimmung aktiv war
-elec_nationalrat_final <- elec_nationalrat_final %>%
+elec_nr_sr_combined <- elec_nr_sr_combined %>%
   mutate(!!!setNames(
-    lapply(voting_5y_dates, function(datum) {
-        abstimmungsdatum <- as.Date(datum)
-        with(., as.integer(                            # 1 der 0 zurück 
-          DateJoining <= abstimmungsdatum &
-            (is.na(DateLeaving) | DateLeaving >= abstimmungsdatum)
-        ))
-      }),
-      voting_5y_dates))
+    lapply(voting_5y_dates,
+           function(datum) {
+             abstimmungsdatum <- as.Date(datum)
+             with(., as.integer(                            # 1 der 0 zurück
+               DateJoining <= abstimmungsdatum &
+                 (is.na(DateLeaving) | DateLeaving >= abstimmungsdatum)))}
+           ), voting_5y_dates))
+
+
+#TODO: in Lookup Liste aufnehmen
+
+lookup_elec_nr_sr_combined_canton <- elec_nr_sr_combined %>% 
+  select(CantonAbbreviation, CantonName) %>% 
+  distinct()
+
+lookup_elec_nr_sr_combined_parties <- elec_nr_sr_combined %>% 
+  select(PartyAbbreviation, PartyName) %>% 
+  distinct()
+
+
+
+# Parteinamen und Abkürzungen vereinheitlichen
+
+
+
+
+# write_xlsx(elec_nationalrat,
+#            "elec_nationalrat_final.xlsx")
+
+```
+
+s
+
+```{r}
 
 
 
@@ -460,103 +588,6 @@ elec_nationalrat_final <- elec_nationalrat_final %>%
 
 # write_xlsx(elec_nationalrat,
 #            "elec_nationalrat_final.xlsx")
-```
-
-#### Ständerat
-
-```{r}
-
-#| label: load_ständerat
-
-
-# Ständerat: Daten einlesen
-elec_ständerat  <- read_excel("~/CAS/Zertifikatsarbeit/data/elections/Ratsmitglieder_1848_DE_BUND_SR.xlsx")
-
-str(elec_ständerat)
-
-
-# Anzeige mit datatable()
-datatable(elec_ständerat,
-          class = 'nowrap',
-          filter = 'top',
-          options = list(pageLength = 7,
-                         scrollX = TRUE,
-                         search = list(regex = TRUE,
-                                       caseInsensitive = TRUE)))
-
-
-# Fehlende Werte (NA), Klassen und Levels prüfen
-Abstract(elec_ständerat)
-PlotMiss(elec_ständerat)
-
-# Datensatz reduzieren auf Aktive und doppelte Einträge elimnieren
-elec_ständerat_reduced <- elec_ständerat %>%
-  filter(Active == TRUE) %>% 
-  distinct(.keep_all = TRUE) %>% 
-  select(CantonAbbreviation,
-         CantonName,
-         PartyAbbreviation,
-         PartyName) %>% 
-  mutate(value = 1)
-
-datatable(elec_ständerat_reduced,
-          class = 'nowrap',
-          filter = 'top',
-          options = list(pageLength = 7,
-                         scrollX = TRUE,
-                         search = list(regex = TRUE,
-                                       caseInsensitive = TRUE)))
-
-# Sitze pro Kanton, Partei und Jahr 
-    
-    # long format
-      df_sum <- elec_ständerat_reduced %>%
-      group_by(CantonAbbreviation, PartyAbbreviation) %>%
-      summarise(sum_value = sum(value, na.rm = TRUE),
-                .groups = "drop")
-    
-    # wide format
-    # Pivotieren: Partei-Spalten erzeugen
-    df_wide <- df_sum %>%
-      pivot_wider(names_from = PartyAbbreviation,
-                  values_from = sum_value,
-                  values_fill = 0)
-    
-    
-    # Partei-Spaltennamen extrahieren (ohne Kanton/Jahr)
-    partei_cols <- setdiff(names(df_wide),
-                           c("CantonAbbreviation"))
-    
-    # Spaltensummen der Parteien berechnen für Sortierung
-    partei_sums <- colSums(df_wide[partei_cols])
-    
-    # Zeilensumme der Kantone/Jahre hinzufügen
-    df_wide$Total <- rowSums(df_wide[partei_cols])
-    
-    
-    # Parteispalten-Anordnung nach Summe sortieren
-    sorted_partei <- names(sort(partei_sums,
-                                decreasing = TRUE))
-    
-    
-    # Dataframe neu anordnen: Kanton/Jahr,  sortierte und gefilterte Parteien
-    elec_ständerat_final <- df_wide[, c(setdiff(names(df_wide),
-                                                  partei_cols),
-                                        sorted_partei)] %>% 
-      arrange(desc(Total))
-    
-datatable(elec_ständerat_final,
-          class = 'nowrap',
-          filter = 'top',
-          options = list(pageLength = 7,
-                         scrollX = TRUE,
-                         search = list(regex = TRUE,
-                                       caseInsensitive = TRUE)))
-
-
-
-# write_xlsx(elec_ständerat,
-#            "elec_ständerat_final.xlsx")
 ```
 
 ### Kantonsebene
