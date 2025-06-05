@@ -71,8 +71,8 @@ filter_active <- function(data, von, bis) {
   bis <- as.Date(bis)
   data %>%
     filter(
-      DateJoining <= bis,                             # Eintritt vor oder am Ende des Zeitraums
-      is.na(DateLeaving) | DateLeaving >= von         # Kein Austritt oder Austritt nach Beginn des Zeitraums
+      DateJoining <= bis,                      # Eintritt vor/am Ende d. Zeitraums
+      is.na(DateLeaving) | DateLeaving >= von  # Kein Austritt/nach Beginn des Z..
     )
 }
 
@@ -80,7 +80,10 @@ filter_active <- function(data, von, bis) {
 
 
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###  
-# Duplikate in df finden & als $unique oder $duplicates selektionierbar machen
+# 
+
+
+
 
 ```
 
@@ -95,47 +98,6 @@ filter_active <- function(data, von, bis) {
 -   Daten werden bereinigt, normalisiert und in das gewünschte Zielformat gebracht (z. B. Wide zu Long, Entfernen von Leerzeilen, Auflösen von verbundenen Zellen, Vereinheitlichung der Spaltenstruktur).
 
 -   Die transformierten Daten werden für die weitere Analyse und Visualisation zu Verfügung gestellt.
-
-## Lookup tables
-
-### Parteinamen
-
-Die verschiedenen Quellen verwenden teils unteschiedliche Parteibezeichnungen. Zur Vereinheitlichung wird deshalb initial eine Lookup Tabelle gebildet.
-
-```{r}
-#| label: load_parties
-
-
-# Dataframe bilden aus zwei Vektoren
-parteinamen <- data.frame(
-  kuerzel = c("fdp", "sps", "svp", "mitte", "evp", "gps", "glp", "ucsp", "pda", "sd", "edu", "fps", "lega", "kvp", "mcg", "cvp", "bdp", "lps", "ldu", "poch", "rep", "eco", "sgv", "sbv", "sgb", "travs", "sav", "vsa", "vpod", "voev", "tcs", "vcs", "acs", "sbk", "ssv", "gem", "kdk", "kkjpd", "gdk", "ldk"),
-  
-  name = c("Freisinnig-demokratische Partei (FDP.Die Liberalen)", "Sozialdemokratische Partei", "Schweizerische Volkspartei (bis 1936 Parolen der BGB Bern)", "Die Mitte", "Evangelische Volkspartei", "Grüne Partei der Schweiz", "Grünliberale Partei", "Christlichsoziale Partei der Schweiz (von der CVP unabhängige CSP)", "Partei der Arbeit", "Schweizer Demokraten", "Eidgenössisch-Demokratische Union", "Autopartei", "Lega dei Ticinesi", "Katholische Volkspartei", "Mouvement Citoyens Genevois", "Christlichdemokratische Volkspartei", "Bürgerlich-Demokratische Partei", "Liberale Partei der Schweiz", "Landesring der Unabhängigen", "Progressive Organisationen der Schweiz", "Schweizerische Republikanische Bewegung", "Economiesuisse (bis 15.9.2000: Schweizerischer Handels- und Industrieverein SHIV (Vorort))", "Schweizerischer Gewerbeverband", "Schweizer Bauernverband", "Schweizerischer Gewerkschaftsbund", "Travail.Suisse (bis 2002: Parolen des Christlichnationalen Gewerkschaftsbunds (CNG); dieser fusionierte per 1.1.2003 mit der VSA zu Travail.Suisse)", "Schweizerischer Arbeitgeberverband (bis 1996: Zentralverband Schweizerischer Arbeitgeber-Organisationen ZSAO)", "Vereinigung schweizerischer Angestelltenverbände", "Verband des Personals öffentlicher Dienste", "Verband öffentlicher Verkehr", "Touring Club Schweiz", "Verkehrs-Club der Schweiz", "Automobil Club der Schweiz", "Schweizer Bischofskonferenz", "Schweizerischer Städteverband", "Schweizerischer Gemeindeverband", "Konferenz der Kantonsregierungen", "Konferenz der kantonalen Justiz- und Polizeidirektoren", "Schweizerische Gesundheitsdirektorenkonferenz", "Konferenz der kantonalen Landwirtschaftsdirektoren"),
-  stringsAsFactors = FALSE)
-
-
-# Parteikürzel in Grossbuchstaben 
-parteinamen$kuerzel <-  toupper(parteinamen$kuerzel)
-
-
-# Neue Spalte mit "p-" Präfix für späteren Lookup der Parteiparolen
-parteinamen$kuerzel_vote_parole <- paste0("p-", parteinamen$kuerzel) 
-
-
-# Spaltenreihenfolge anpassen: p_kuerzel, kuerzel, name
-parteinamen <- parteinamen[, c("kuerzel_vote_parole",
-                               "kuerzel",
-                               "name")]
-
-# Anzeige mit datatable()
-datatable(parteinamen,
-          class = 'nowrap',
-          filter = 'top',
-          options = list(pageLength = 7,
-                         scrollX = TRUE,
-                         search = list(regex = TRUE,
-                                       caseInsensitive = TRUE)))
-```
 
 Kantone
 
@@ -169,6 +131,7 @@ voting_raw <- voting_raw %>%
 voting_5y <- voting_raw %>%
   filter(datum >= as.Date("2020-01-01"))
 
+# Abstimmungen ab 2020 in datatable() anzeigen
 datatable(voting_5y,
           class = 'nowrap',
           filter = 'top',
@@ -178,8 +141,36 @@ datatable(voting_5y,
                                        caseInsensitive = TRUE)))
 
 
-# Parolen Header extrahieren um Parteinamen für Lookup vorzubereiten
-voting_parties <- paste(grep("^p-", names(voting_5y), value = TRUE), collapse = ", ")
+
+# Parolen Header (p-.. & pdev-...-..) extrahieren als Vorbereitung für Lookup
+voting_parties_combined <- bind_rows(
+  
+  # Block 1: Staatsebene
+  tibble(voting_parties = grep("^p-",                # Mutterparteien / National
+                               names(voting_5y),
+                               value = TRUE)) %>%
+    mutate(source = "state") %>%
+    separate(
+      voting_parties,
+      into = c("prefix", "short_name", "add_info"),
+      sep = "[-_]",
+      remove = FALSE,
+      extra = "merge",
+      fill = "right"),
+  
+  # Block 2: Kantonsebene, Jungparteien, Frauen etc.
+  tibble(voting_parties = grep("^pdev-",             # Abweichende Sektionen
+                               names(voting_5y),
+                               value = TRUE)) %>%
+    mutate(source = "canton") %>%
+    separate(
+      voting_parties,
+      into = c("prefix", "short_name", "add_info"),
+      sep = "[-_]",
+      remove = FALSE,
+      extra = "merge",
+      fill = "right"))
+
 
 
 
@@ -305,7 +296,6 @@ elec_nationalrat_duplicates <- find_and_remove_duplicates(elec_nationalrat)
 # df mit unique Einträge weiterverwenden 
 elec_nationalrat <- elec_nationalrat_duplicates$unique
 
-  
 # Auf relevante Spalten reduzieren und Datumsformat anpassen
     # Spaltenüberschriften konkateniert
     # cat(paste(paste0('"', colnames(elec_nationalrat), '"'),collapse = ",\n"))
@@ -417,6 +407,9 @@ datatable(elec_ständerat_final,
 
 
 
+
+
+
 # Sitze pro Kanton, Partei und Jahr 
     
 #     # long format
@@ -471,7 +464,7 @@ datatable(elec_ständerat_final,
 
 ```
 
-#### National- & Ständerat kombinieren für weiter Bearbeitung 
+#### National- & Ständerat kombinieren für weitere Bearbeitung
 
 ```{r}
 #| label: combine_parliament
@@ -955,6 +948,55 @@ datatable(elec_gemeinde_exekutiven_combined,
 
 parties_rating <- read_excel("~/CAS/Zertifikatsarbeit/data/parties_economic_socio-political_rating.xlsx",
                              sheet = "matrix_eco-socio_enhanced")
+```
+
+## Lookup tables
+
+### Kantone
+
+abc
+
+```{r}
+
+```
+
+### Parteinamen
+
+Die verschiedenen Quellen verwenden teils unteschiedliche Parteibezeichnungen. Zur Vereinheitlichung wird deshalb initial eine Lookup Tabelle gebildet.
+
+```{r}
+#| label: load_parties
+
+
+# Dataframe bilden aus zwei Vektoren
+parteinamen <- data.frame(
+  kuerzel = c("fdp", "sps", "svp", "mitte", "evp", "gps", "glp", "ucsp", "pda", "sd", "edu", "fps", "lega", "kvp", "mcg", "cvp", "bdp", "lps", "ldu", "poch", "rep", "eco", "sgv", "sbv", "sgb", "travs", "sav", "vsa", "vpod", "voev", "tcs", "vcs", "acs", "sbk", "ssv", "gem", "kdk", "kkjpd", "gdk", "ldk"),
+  
+  name = c("Freisinnig-demokratische Partei (FDP.Die Liberalen)", "Sozialdemokratische Partei", "Schweizerische Volkspartei (bis 1936 Parolen der BGB Bern)", "Die Mitte", "Evangelische Volkspartei", "Grüne Partei der Schweiz", "Grünliberale Partei", "Christlichsoziale Partei der Schweiz (von der CVP unabhängige CSP)", "Partei der Arbeit", "Schweizer Demokraten", "Eidgenössisch-Demokratische Union", "Autopartei", "Lega dei Ticinesi", "Katholische Volkspartei", "Mouvement Citoyens Genevois", "Christlichdemokratische Volkspartei", "Bürgerlich-Demokratische Partei", "Liberale Partei der Schweiz", "Landesring der Unabhängigen", "Progressive Organisationen der Schweiz", "Schweizerische Republikanische Bewegung", "Economiesuisse (bis 15.9.2000: Schweizerischer Handels- und Industrieverein SHIV (Vorort))", "Schweizerischer Gewerbeverband", "Schweizer Bauernverband", "Schweizerischer Gewerkschaftsbund", "Travail.Suisse (bis 2002: Parolen des Christlichnationalen Gewerkschaftsbunds (CNG); dieser fusionierte per 1.1.2003 mit der VSA zu Travail.Suisse)", "Schweizerischer Arbeitgeberverband (bis 1996: Zentralverband Schweizerischer Arbeitgeber-Organisationen ZSAO)", "Vereinigung schweizerischer Angestelltenverbände", "Verband des Personals öffentlicher Dienste", "Verband öffentlicher Verkehr", "Touring Club Schweiz", "Verkehrs-Club der Schweiz", "Automobil Club der Schweiz", "Schweizer Bischofskonferenz", "Schweizerischer Städteverband", "Schweizerischer Gemeindeverband", "Konferenz der Kantonsregierungen", "Konferenz der kantonalen Justiz- und Polizeidirektoren", "Schweizerische Gesundheitsdirektorenkonferenz", "Konferenz der kantonalen Landwirtschaftsdirektoren"),
+  stringsAsFactors = FALSE)
+
+
+# Parteikürzel in Grossbuchstaben 
+parteinamen$kuerzel <-  toupper(parteinamen$kuerzel)
+
+
+# Neue Spalte mit "p-" Präfix für späteren Lookup der Parteiparolen
+parteinamen$kuerzel_vote_parole <- paste0("p-", parteinamen$kuerzel) 
+
+
+# Spaltenreihenfolge anpassen: p_kuerzel, kuerzel, name
+parteinamen <- parteinamen[, c("kuerzel_vote_parole",
+                               "kuerzel",
+                               "name")]
+
+# Anzeige mit datatable()
+datatable(parteinamen,
+          class = 'nowrap',
+          filter = 'top',
+          options = list(pageLength = 7,
+                         scrollX = TRUE,
+                         search = list(regex = TRUE,
+                                       caseInsensitive = TRUE)))
 ```
 
 # Transformation & visualization
