@@ -107,10 +107,10 @@ filter_active <- function(data, von, bis) {
 
 # Manuell migrierte Lookup Tabellen aus dem PDF-Codebook (swissvotes.ch) laden
 # Parteien
-lookups_codebook_parties <- read_excel("lookups_codebook.xlsx",
+lookups_codebook_parties <- read_excel("data/lookups_codebook.xlsx",
                                        sheet = "parties")
 # Parteiparolen
-lookups_codebook_paroles <- read_excel("lookups_codebook.xlsx",
+lookups_codebook_paroles <- read_excel("data/lookups_codebook.xlsx",
                                        sheet = "paroles")
 
 
@@ -199,63 +199,24 @@ lookup_voting_parties_label <- bind_rows(
 ```{r}
 #| label: load_nationalrat
 
+# Header laden
+header <- as.character(read_excel("data/je-d-17.02.02.02.01.01_BUND_NATIONALRAT.xlsx",
+                                  skip = 0,
+                                  n_max = 1)[1, ])
 
-# Nationalrat: Daten einlesen
-elec_nationalrat  <- read_excel("data/Ratsmitglieder_1848_DE_BUND_NR.xlsx")
+# Spaltennamen "Partei 1" zu "Partei" umbenennen
+header[header == "Partei 1"] <- "Partei"
 
-# Struktur prüfen
-str(elec_nationalrat)
+# Daten ab Zeile 4 (+25) mit diesem Header einlesen
+elec_nationalrat <- read_excel("data/je-d-17.02.02.02.01.01_BUND_NATIONALRAT.xlsx",
+                               skip = 3,
+                               n_max = 25,
+                               col_names = header)
 
-# Fehlende Werte (NA), Klassen und Levels prüfen
-Abstract(elec_nationalrat)
-PlotMiss(elec_nationalrat)    
-    
-# Duplikate mittels Funktion ermitteln
-elec_nationalrat_duplicates <- find_and_remove_duplicates(elec_nationalrat)
-    # elec_nationalrat_duplicates$unique
-    # elec_nationalrat_duplicates$duplicates
-
-# df mit unique Einträge weiterverwenden 
-elec_nationalrat <- elec_nationalrat_duplicates$unique
-
-# Auf relevante Spalten reduzieren und Datumsformat anpassen
-    # Spaltenüberschriften konkateniert
-    # cat(paste(paste0('"', colnames(elec_nationalrat), '"'),collapse = ",\n"))
-
-elec_nationalrat_final <- elec_nationalrat %>% 
-  select(# "Active",
-         # "FirstName",
-         # "LastName",
-         # "GenderAsString",
-         "CantonName",
-         "CantonAbbreviation",
-         # "CouncilName",
-         # "ParlGroupName",
-         # "ParlGroupAbbreviation",
-         "PartyName",
-         "PartyAbbreviation",
-         # "MaritalStatusText",
-         # "Nationality",
-         # "BirthPlace_City",
-         # "BirthPlace_Canton",
-         # "Mandates",
-         "DateJoining",
-         "DateLeaving",
-         # "Citizenship",
-         # "DateOfBirth",
-         "DateOfDeath") %>% 
-  mutate(DateJoining = dmy(DateJoining),
-         DateLeaving = dmy(DateLeaving),
-         DateOfDeath = dmy(DateOfDeath))  
-
-# Anzeige mit datatable()
-datatable(elec_nationalrat_final,
-          class = 'nowrap',
-          filter = 'top',
-          options = list(pageLength = 7,
-                         scrollX = TRUE,
-                         search = list(regex = TRUE,
-                                       caseInsensitive = TRUE)))
+# Refernzen zu Fussnoten aus Parteispalte löschen
+elec_nationalrat$Partei <- sub("\\s*\\d+$",
+                                   "",
+                                   elec_nationalrat$Partei)
 ```
 
 #### Ständerat
@@ -263,66 +224,228 @@ datatable(elec_nationalrat_final,
 ```{r}
 #| label: load_ständerat
 
+# Header laden
+header <- as.character(read_excel("data/je-d-17.02.03.01_BUND_STÄNDERAT.xlsx",
+                                  skip = 0,
+                                  n_max = 1)[1, ])
 
-# Ständerat: Daten einlesen
-elec_ständerat  <- read_excel("data/Ratsmitglieder_1848_DE_BUND_SR.xlsx")
+# Daten ab Zeile 5 (+14) mit diesem Header einlesen
+elec_ständerat <- read_excel("data/je-d-17.02.03.01_BUND_STÄNDERAT.xlsx",
+                              skip = 4,
+                              n_max = 14,
+                              col_names = header)
 
-# Struktur prüfen
-str(elec_ständerat)
+# Refernzen zu Fussnoten aus Parteispalte löschen
+elec_ständerat$Partei <- sub("\\s*\\d+$",
+                                   "",
+                                   elec_ständerat$Partei)
 
-# Fehlende Werte (NA), Klassen und Levels prüfen
-Abstract(elec_ständerat)
-PlotMiss(elec_ständerat)    
-    
-# Duplikate mittels Funktion ermitteln
-elec_ständerat_duplicates <- find_and_remove_duplicates(elec_ständerat)
-    # elec_nationalrat_duplicates$unique
-    # elec_nationalrat_duplicates$duplicates
+```
 
-# df mit unique Einträge weiterverwenden 
-elec_ständerat <- elec_ständerat_duplicates$unique
+#### Nationalrat - & Ständerat: Stichtagansatz. Unbrauchbar, Datenqualität ungenügend
 
-  
-# Auf relevante Spalten reduzieren und Datumsformat anpassen
-    # Spaltenüberschriften konkateniert
-    # cat(paste(paste0('"', colnames(elec_nationalrat), '"'),collapse = ",\n"))
+```{r}
+#| label: load_nationalrat_old
+#| eval: false
+#| include: false
+# 
+# #################################################################################
+# ## Der Datenexport von parlament.ch ist unvollständig. Es müssten per beliebigem ## Stichtag immer 200 National- und 46 Ständeräte sein, was nicht zutrifft. 
+# ## Auserdem befinden sich Duplikate in den Daten.
+# ## Es wird deshalb von einer Tagesgenauen Betrachtung abgesehen und stattdessen ## nur die Wahlergebnisse von 2019 und 2023 berücksichtigt.
+# ## Zumindest solange, bis Daten korrekt publiziert sind.
+# #################################################################################
+# 
+# # Nationalrat: Daten einlesen
+# elec_nationalrat  <- read_excel("data/Ratsmitglieder_1848_DE_BUND_NR.xlsx")
+# 
+# # Struktur prüfen
+# str(elec_nationalrat)
+# 
+# # Fehlende Werte (NA), Klassen und Levels prüfen
+# Abstract(elec_nationalrat)
+# PlotMiss(elec_nationalrat)    
+#     
+# # Duplikate mittels Funktion ermitteln
+# elec_nationalrat_duplicates_check <- find_and_remove_duplicates(elec_nationalrat)
+#     # elec_nationalrat_duplicates$unique
+#     # elec_nationalrat_duplicates$duplicates
+# 
+# # df mit unique Einträge weiterverwenden 
+# elec_nationalrat <- elec_nationalrat_duplicates_check$unique
+# 
+# # Auf relevante Spalten reduzieren und Datumsformat anpassen
+#     # Spaltenüberschriften konkateniert
+#     # cat(paste(paste0('"', colnames(elec_nationalrat), '"'),collapse = ",\n"))
+# 
+# onalrat_final <- elec_nationalrat %>% 
+#   select(# "Active",
+#          # "FirstName",
+#          # "LastName",
+#          # "GenderAsString",
+#          "CantonName",
+#          "CantonAbbreviation",
+#          # "CouncilName",
+#          # "ParlGroupName",
+#          # "ParlGroupAbbreviation",
+#          "PartyName",
+#          "PartyAbbreviation",
+#          # "MaritalStatusText",
+#          # "Nationality",
+#          # "BirthPlace_City",
+#          # "BirthPlace_Canton",
+#          # "Mandates",
+#          "DateJoining",
+#          "DateLeaving",
+#          # "Citizenship",
+#          # "DateOfBirth",
+#          "DateOfDeath") %>%
+#   mutate(DateJoining = dmy(DateJoining),
+#          DateLeaving = dmy(DateLeaving),
+#          DateOfDeath = dmy(DateOfDeath))  
+# 
+# # Anzeige mit datatable()
+# datatable(elec_nationalrat_final,
+#           class = 'nowrap',
+#           filter = 'top',
+#           options = list(pageLength = 7,
+#                          scrollX = TRUE,
+#                          search = list(regex = TRUE,
+#                                        caseInsensitive = TRUE)))
+```
 
+```{r}
+#| label: load_ständerat_old
+#| eval: false
+#| include: false
+# 
+# #################################################################################
+# ## Der Datenexport von parlament.ch ist unvollständig. Es müssten per beliebigem ## Stichtag immer 200 National- und 46 Ständeräte sein, was nicht zutrifft. 
+# ## Auserdem befinden sich Duplikate in den Daten.
+# ## Es wird deshalb von einer Tagesgenauen Betrachtung abgesehen und stattdessen ## nur die Wahlergebnisse von 2019 und 2023 berücksichtigt.
+# ## Zumindest solange, bis Daten korrekt publiziert sind.
+# #################################################################################
+# 
+# # Ständerat: Daten einlesen
+# elec_ständerat  <- read_excel("data/Ratsmitglieder_1848_DE_BUND_SR.xlsx")
+# 
+# # Struktur prüfen
+# str(elec_ständerat)
+# 
+# # Fehlende Werte (NA), Klassen und Levels prüfen
+# Abstract(elec_ständerat)
+# PlotMiss(elec_ständerat)    
+#     
+# # Duplikate mittels Funktion ermitteln
+# elec_ständerat_duplicates_check <- find_and_remove_duplicates(elec_ständerat)
+#     # elec_nationalrat_duplicates$unique
+#     # elec_nationalrat_duplicates$duplicates
+# 
+# # df mit unique Einträge weiterverwenden 
+# elec_ständerat <- elec_ständerat_duplicates_check$unique
+# 
+# # Auf relevante Spalten reduzieren und Datumsformat anpassen
+#     # Spaltenüberschriften konkateniert
+#     # cat(paste(paste0('"', colnames(elec_nationalrat), '"'),collapse = ",\n"))
+# 
+# elec_ständerat_final <- elec_ständerat %>% 
+#   select(# "Active",
+#          # "FirstName",
+#          # "LastName",
+#          # "GenderAsString",
+#          "CantonName",
+#          "CantonAbbreviation",
+#          # "CouncilName",
+#          # "ParlGroupName",
+#          # "ParlGroupAbbreviation",
+#          "PartyName",
+#          "PartyAbbreviation",
+#          # "MaritalStatusText",
+#          # "Nationality",
+#          # "BirthPlace_City",
+#          # "BirthPlace_Canton",
+#          # "Mandates",
+#          "DateJoining",
+#          "DateLeaving",
+#          # "Citizenship",
+#          # "DateOfBirth",
+#          "DateOfDeath") %>%
+#   mutate(DateJoining = dmy(DateJoining),
+#          DateLeaving = dmy(DateLeaving),
+#          DateOfDeath = dmy(DateOfDeath))
+# 
+# # Anzeige mit datatable()
+# datatable(elec_ständerat_final,
+#           class = 'nowrap',
+#           filter = 'top',
+#           options = list(pageLength = 7,
+#                          scrollX = TRUE,
+#                          search = list(regex = TRUE,
+#                                        caseInsensitive = TRUE)))
+```
 
-elec_ständerat_final <- elec_ständerat %>% 
-  select(# "Active",
-         # "FirstName",
-         # "LastName",
-         # "GenderAsString",
-         "CantonName",
-         "CantonAbbreviation",
-         # "CouncilName",
-         # "ParlGroupName",
-         # "ParlGroupAbbreviation",
-         "PartyName",
-         "PartyAbbreviation",
-         # "MaritalStatusText",
-         # "Nationality",
-         # "BirthPlace_City",
-         # "BirthPlace_Canton",
-         # "Mandates",
-         "DateJoining",
-         "DateLeaving",
-         # "Citizenship",
-         # "DateOfBirth",
-         "DateOfDeath") %>% 
-  mutate(DateJoining = dmy(DateJoining),
-         DateLeaving = dmy(DateLeaving),
-         DateOfDeath = dmy(DateOfDeath))
+```{r}
+#| label: combine_parliament_old
+#| eval: false
+#| include: false
 
-
-# Anzeige mit datatable()
-datatable(elec_ständerat_final,
-          class = 'nowrap',
-          filter = 'top',
-          options = list(pageLength = 7,
-                         scrollX = TRUE,
-                         search = list(regex = TRUE,
-                                       caseInsensitive = TRUE)))
+# 
+# # National- und Ständeratlisten kombinieren
+# elec_nr_sr_combined <- bind_rows(
+#   elec_nationalrat_final %>% mutate(role = "Nationalrat"),
+#   elec_ständerat_final %>% mutate(role = "Ständerat")) %>%
+#   select(role, everything())
+# 
+# 
+# # Abstiummungsdatum (voting_5y_dates) als Spalten hinzufügen
+# elec_nr_sr_combined <- elec_nr_sr_combined %>%
+#   mutate(!!!setNames(rep(list(NA_integer_),
+#                          length(voting_5y_dates)),
+#                      voting_5y_dates))
+# 
+# # Ergänzen ob Ratsmitglied zum Zeitpunkt der Abstimmung aktiv war
+# elec_nr_sr_combined <- elec_nr_sr_combined %>%
+#   mutate(!!!setNames(
+#     lapply(voting_5y_dates,
+#            function(datum) {
+#              abstimmungsdatum <- as.Date(datum)
+#              with(., as.integer(                            # 1 der 0 zurück
+#                DateJoining <= abstimmungsdatum &
+#                  (is.na(DateLeaving) | DateLeaving >= abstimmungsdatum)))}
+#            ), voting_5y_dates))
+# 
+# 
+# write_xlsx(elec_nr_sr_combined, "temp_nr_sr.xlsx")
+# 
+# ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
+# 
+# 
+# # Kanton- und Parteibezeichnungen zwecks Lookup/Vereinheitlichung in df schreiben 
+# lookup_elec_nr_sr_combined_canton_label <- elec_nr_sr_combined %>% 
+#   select(CantonAbbreviation, CantonName) %>% 
+#   distinct()
+# 
+# 
+# lookup_elec_nr_sr_combined_parties_label  <- elec_nr_sr_combined %>%
+#   select(PartyAbbreviation, PartyName) %>%
+#   distinct() %>%
+#   rename(party_orig_value = PartyAbbreviation,
+#          long_name = PartyName) %>%
+#   mutate(prefix = NA_character_,
+#          add_info = NA,
+#          level = NA_character_,
+#          source = "National_und_Ständerat",
+#          short_name = party_orig_value %>%
+#            str_replace("-.*", "") %>%         # ab dem ersten "-" abschneiden
+#            str_replace("^M-E$", "Mitte") %>%  # "M-E" durch "Mitte" ersetzen
+#          toupper())%>% 
+#   select(party_orig_value,
+#          short_name,
+#          long_name,
+#          prefix,
+#          add_info,
+#          level,
+#          source)
 ```
 
 #### National- & Ständerat kombinieren für weitere Bearbeitung
@@ -330,61 +453,28 @@ datatable(elec_ständerat_final,
 ```{r}
 #| label: combine_parliament
 
+# Fussnoten aus Spaltenbeschriftungen entfernen
+make.unique(colnames(elec_nationalrat))
+colnames(elec_nationalrat) <- gsub(" \\d+$",
+                                   "",
+                                   colnames(elec_nationalrat))
+make.unique(colnames(elec_nationalrat))
 
-# National- und Ständeratlisten kombinieren
+
+make.unique(colnames(elec_ständerat))
+colnames(elec_ständerat) <- gsub(" \\d+$",
+                                 "",
+                                 colnames(elec_ständerat))
+make.unique(colnames(elec_ständerat))
+
+
+# df zusammenführen
 elec_nr_sr_combined <- bind_rows(
-  elec_nationalrat_final %>% mutate(role = "Nationalrat"),
-  elec_ständerat_final %>% mutate(role = "Ständerat")) %>%
+  elec_nationalrat %>% mutate(role = "Nationalrat"),
+  elec_ständerat %>% mutate(role = "Ständerat")) %>%
   select(role, everything())
 
 
-# Abstiummungsdatum (voting_5y_dates) als Spalten hinzufügen
-elec_nr_sr_combined <- elec_nr_sr_combined %>%
-  mutate(!!!setNames(rep(list(NA_integer_),
-                         length(voting_5y_dates)),
-                     voting_5y_dates))
-
-# Ergänzen ob Ratsmitglied zum Zeitpunkt der Abstimmung aktiv war
-elec_nr_sr_combined <- elec_nr_sr_combined %>%
-  mutate(!!!setNames(
-    lapply(voting_5y_dates,
-           function(datum) {
-             abstimmungsdatum <- as.Date(datum)
-             with(., as.integer(                            # 1 der 0 zurück
-               DateJoining <= abstimmungsdatum &
-                 (is.na(DateLeaving) | DateLeaving >= abstimmungsdatum)))}
-           ), voting_5y_dates))
-
-
-### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
-
-
-# Kanton- und Parteibezeichnungen zwecks Lookup/Vereinheitlichung in df schreiben 
-lookup_elec_nr_sr_combined_canton_label <- elec_nr_sr_combined %>% 
-  select(CantonAbbreviation, CantonName) %>% 
-  distinct()
-
-
-lookup_elec_nr_sr_combined_parties_label  <- elec_nr_sr_combined %>%
-  select(PartyAbbreviation, PartyName) %>%
-  distinct() %>%
-  rename(party_orig_value = PartyAbbreviation,
-         long_name = PartyName) %>%
-  mutate(prefix = NA_character_,
-         add_info = NA,
-         level = NA_character_,
-         source = "National_und_Ständerat",
-         short_name = party_orig_value %>%
-           str_replace("-.*", "") %>%         # ab dem ersten "-" abschneiden
-           str_replace("^M-E$", "Mitte") %>%  # "M-E" durch "Mitte" ersetzen
-         toupper())%>% 
-  select(party_orig_value,
-         short_name,
-         long_name,
-         prefix,
-         add_info,
-         level,
-         source)
 ```
 
 ### Kantonsebene
@@ -404,6 +494,8 @@ Die Struktur der "schön formatierten" Exceldatei lässt keinen "simplen" Import
 Dateipfad und gewünschte Sheets festlegen
 
 ```{r}
+#| label: set_path_Kanton
+
 dateipfad <- "data/je-d-17.02.06.01_KANTON_Kantonale_Regierungswahlen.xlsx"  
 
 selected_sheets <- c("2024", "2023", "2022","2021","2020","2019")
@@ -412,6 +504,8 @@ selected_sheets <- c("2024", "2023", "2022","2021","2020","2019")
 Function
 
 ```{r}
+#| label: load_function
+
 
 import_election_data <- function(dateipfad, sheetname) {
   
@@ -459,6 +553,7 @@ import_election_data <- function(dateipfad, sheetname) {
 Function ausführen: Import und Konsolidation
 
 ```{r}
+#| label: run_function
 
 # Objekt erstellen, mit Sheets als tibble/dataframe
 daten_liste <- setNames(lapply(selected_sheets,
@@ -531,6 +626,7 @@ datatable(elec_kantonale_regierung_combined,
 Dateipfad und gewünschte Sheets festlegen
 
 ```{r}
+#| label: set_path_Gemeinde
 
 dateipfad <- "data/je-d-17.02.07.01_GEMEINDE_Die Exekutiven der statistischen Städte.xlsx"
 
@@ -540,6 +636,7 @@ selected_sheets <- c("2024", "2023", "2022","2021","2020","2019")
 Function für den Import der Gemeindedaten
 
 ```{r}
+#| label: load_function_Gemeinde
 
 importiere_sheet <- function(dateipfad, sheetname) {
 
@@ -637,6 +734,8 @@ importiere_sheet <- function(dateipfad, sheetname) {
 Function ausführen: Import der Dateien testen
 
 ```{r}
+#| label: run_test_function_Gemeinde
+
 
 for (sheet in selected_sheets) {
   cat("\n-----------------------------\n")
@@ -660,6 +759,7 @@ for (sheet in selected_sheets) {
 Function ausführen: Import und Konsolidation
 
 ```{r}
+#| label: run_funciton_Gemeinde
 
 # Objekt erstellen, mit Sheets als tibble/dataframe
 daten_liste <- setNames(lapply(selected_sheets,
@@ -721,7 +821,6 @@ lookup_gemeinde_exekutiven_parties_label %>% distinct() %>% print(n = Inf)
 ## Parteilandschaft
 
 ```{r}
-
 #| label: load_parties_rating
 
 parties_rating <- read_excel("data/parties_economic_socio-political_rating.xlsx",
@@ -877,6 +976,44 @@ voting_5y %>%
          `volkja-proz`)
 
 
+```
+
+## Wahlen: Parteistärken per Abstimmungstag je Staatsebene
+
+Bundesebene
+
+```{r}
+
+
+# 1. Datumsspalten finden
+date_cols <- grep("^\\d{4}-\\d{2}-\\d{2}$", names(elec_nr_sr_combined), value = TRUE)
+
+# 2. Gruppieren und Summen berechnen
+result_sum <- elec_nr_sr_combined %>%
+  group_by(PartyName) %>%
+  summarise(across(all_of(date_cols), sum, na.rm = TRUE), .groups = "drop")
+
+# 3. Prozentwerte berechnen und anfügen
+result_pct <- result_sum %>%
+  mutate(across(
+    all_of(date_cols),
+    ~ . / sum(.) * 100,
+    .names = "{.col}_pct"
+  ))
+
+# 4. Spaltenreihenfolge anpassen: immer [Datum, Datum_pct, Datum2, Datum2_pct, ...]
+new_order <- c(
+  "PartyName",
+  as.vector(rbind(date_cols, paste0(date_cols, "_pct")))
+)
+
+result_final <- result_pct %>%
+  select(all_of(new_order))
+
+print(result_final)
+
+
+write_xlsx(result_final, "temp.xlsx")
 ```
 
 ## Parteilandschaft
