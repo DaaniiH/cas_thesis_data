@@ -99,6 +99,28 @@ filter_active <- function(data, von, bis) {
 
 -   Die transformierten Daten werden für die weitere Analyse und Visualisation zu Verfügung gestellt.
 
+## Lookup Tabellen
+
+```{r}
+
+# Dataframe bilden für Lookup der Kantonsnamen/-Kürzel
+lookup_kantone <- data.frame(Kanton = c("Aargau", "Appenzell A. Rh.",
+                                        "Appenzell I. Rh.", "Basel-Landschaft",
+                                        "Basel-Stadt", "Bern", "Freiburg", "Genf",
+                                        "Glarus", "Graubünden", "Jura", "Luzern",
+                                        "Neuenburg", "Nidwalden", "Obwalden",
+                                        "Schaffhausen", "Schwyz", "Solothurn",
+                                        "St. Gallen", "Tessin", "Thurgau", "Uri",
+                                        "Waadt", "Wallis", "Zug", "Zürich"),
+                             Kt = c("AG", "AR", "AI", "BL", "BS","BE", "FR", "GE",
+                                    "GL", "GR", "JU", "LU", "NE","NW", "OW", "SH",
+                                    "SZ", "SO", "SG","TI", "TG", "UR", "VD", "VS",
+                                    "ZG", "ZH"),
+                             stringsAsFactors = FALSE)
+
+
+```
+
 ## Abstimmungen
 
 ```{r}
@@ -468,13 +490,106 @@ colnames(elec_ständerat) <- gsub(" \\d+$",
 make.unique(colnames(elec_ständerat))
 
 
-# df zusammenführen
-elec_nr_sr_combined <- bind_rows(
+# df zusammenführen (Wide Format)
+elec_nr_sr_combined_wide <- bind_rows(
   elec_nationalrat %>% mutate(role = "Nationalrat"),
   elec_ständerat %>% mutate(role = "Ständerat")) %>%
   select(role, everything())
 
 
+# df ins Long Format umwandeln
+elec_nr_sr_combined_long <- elec_nr_sr_combined_wide %>%
+  pivot_longer(cols = matches("^\\d{4}$"),            # Spalten mit 4 Ziffern
+               names_to = "election_year",
+               values_to = "n_seats") %>%
+  mutate(election_year = as.integer(election_year),   # Jahr als Zahl
+         n_seats = as.numeric(n_seats))               # Sitze als Zahl oder NA
+
+# Zeitreihe für jede Partei/role vervollständigen und Werte fortschreiben
+elec_nr_sr_combined <- elec_nr_sr_combined_long %>%
+  rename(party_orig_value = Partei) %>% 
+  group_by(role, party_orig_value) %>%
+  mutate(year = election_year) %>%                           # Jahrsspalte erzeugen
+  complete(year = full_seq(range(election_year, na.rm = TRUE), 1),  # Alle Jahre
+           fill = list(n_seats = NA, election_year = NA)) %>%
+  arrange(role,
+          party_orig_value,
+          year) %>%
+  fill(election_year,
+       n_seats,
+       .direction = "down") %>%
+  ungroup()
+  
+
+
+# Dataframe analog anderer Staatsebenen in gleiche/ähnliche Struktur bringen
+elec_nr_sr_combined <- elec_nr_sr_combined_long %>%
+  rename(party_orig_value = Partei) %>%
+  group_by(role,
+           party_orig_value) %>%
+  mutate(year = election_year) %>%                            # Jahrsspalte
+  complete(year = full_seq(range(election_year,               # Alle Jahre
+                                 na.rm = TRUE),
+                                 1),                          # 1er Sequenz
+           fill = list(n_seats = NA,
+                       election_year = NA)) %>%
+  arrange(role,                                               # Anordnen vor füllen
+          party_orig_value,
+          year) %>%
+  # Block-Index: zählt, wie oft election_year gefüllt ist / neues Wahljahr beginnt
+  mutate(block = cumsum(!is.na(election_year))) %>%
+  group_by(role,
+           party_orig_value,
+           block) %>%
+  fill(election_year,
+       n_seats,
+       .direction = "down") %>%
+  ungroup() %>%
+  select(-block) 
+
+
+# Ratssitze pro Jahr (nach-)prüfen
+elec_nr_sr_combined_sum_check <- elec_nr_sr_combined %>%
+  group_by(year, role) %>%
+  summarise(total_n_seats = sum(n_seats,
+                                na.rm = TRUE),
+    .groups = "drop") %>%
+  print(n=Inf)
+              
+unique(elec_nr_sr_combined$party_orig_value)
+
+
+```
+
+##### Bund - Parteinamen
+
+```{r}
+
+# Partei-Labels identifizieren
+lookup_elec_nr_sr_combined_parties_label  <- elec_nr_sr_combined %>%
+  select(party_orig_value) %>%
+  distinct() %>%
+  mutate(party_orig_value = toupper(party_orig_value),
+         short_name = party_orig_value,
+         short_name = if_else(short_name == "DIE MITTE",      # Umbenennen
+                              "MITTE",
+                              short_name),
+         short_name = if_else(short_name == "MCG (MCR)",      # Umbenennen
+                              "MCG",
+                              short_name),
+         short_name = gsub("\\.", "", short_name),            # . entfernen
+         long_name = NA_character_,
+         prefix = NA_character_,
+         add_info = NA,
+         level = NA_character_,
+         source = "National_und_Ständerat") %>%
+  select(party_orig_value,
+         short_name,
+         long_name,
+         prefix,
+         add_info,
+         level,
+         source) %>% print(n=Inf)
 ```
 
 ### Kantonsebene
@@ -491,7 +606,7 @@ Die Struktur der "schön formatierten" Exceldatei lässt keinen "simplen" Import
 
 -   Daten (für Kantone) starten in Zeile 4 aber enden auf Zeile 29 bevor es mit Kommentaren und Fussnoten weitergeht.
 
-Dateipfad und gewünschte Sheets festlegen
+##### Dateipfad und gewünschte Sheets festlegen
 
 ```{r}
 #| label: set_path_Kanton
@@ -501,7 +616,7 @@ dateipfad <- "data/je-d-17.02.06.01_KANTON_Kantonale_Regierungswahlen.xlsx"
 selected_sheets <- c("2024", "2023", "2022","2021","2020","2019")
 ```
 
-Function
+##### Function
 
 ```{r}
 #| label: load_function
@@ -535,10 +650,12 @@ import_election_data <- function(dateipfad, sheetname) {
     filter(!is.na(suppressWarnings(as.numeric(.data[[wahljahr_col]]))))
   
   # Zu pivotierenden Spalten in numeric umwandeln
-  cols_pivot <- setdiff(names(daten_wide), c("Kanton", wahljahr_col))
+  cols_pivot <- setdiff(names(daten_wide),
+                        c("Kanton", wahljahr_col))
   daten_wide <- daten_wide %>%
-    mutate(across(all_of(cols_pivot), as.numeric))
-  
+    mutate(across(all_of(cols_pivot),
+                  as.numeric))
+    
   # 6. Pivotieren
   daten_long <- daten_wide %>%
     pivot_longer(
@@ -550,7 +667,7 @@ import_election_data <- function(dateipfad, sheetname) {
 }
 ```
 
-Function ausführen: Import und Konsolidation
+##### Function ausführen: Import und Konsolidation
 
 ```{r}
 #| label: run_function
@@ -566,14 +683,49 @@ lapply(daten_liste, summary)
 
 # Alle tibbles zu einem Dataframe zusammenfügen
 elec_kantonale_regierung_combined <- bind_rows(daten_liste,
-                                               .id = "Sheet")
+                                               .id = "year") %>%
+  rename(election_year = Wahljahr,
+         party_orig_value = Partei,
+         n_seats = Wert) %>%
+  mutate(role = "Kantonsregierung") %>% 
+  filter(party_orig_value != "Total") %>%
+  left_join(lookup_kantone, by = "Kanton") %>%
+  select(role,
+         party_orig_value,
+         year,
+         election_year,
+         n_seats,
+         Kt,
+         Kanton,
+         everything())
+
+# Ratssitze pro Jahr (nach-)prüfen
+elec_kantonale_regierung_sum_check <- elec_kantonale_regierung_combined %>%
+  group_by(year, role) %>%
+  summarise(total_n_seats = sum(n_seats,
+                                na.rm = TRUE),
+    .groups = "drop") %>%
+  print(n=Inf)
+
+ 
+datatable(elec_kantonale_regierung_combined,
+          class = 'nowrap',
+          filter = 'top',
+          options = list(pageLength = 7,
+                         scrollX = TRUE,
+                         search = list(regex = TRUE,
+                                       caseInsensitive = TRUE)))
+```
+
+##### Kanton - Parteinamen
+
+```{r}
 
 # Parteinamenvarianten
-unique(elec_kantonale_regierung_combined$Partei)
+unique(elec_kantonale_regierung_combined$party_orig_value)
 
 # Parteien zwecks Lookup/Vereinheitlichung in df schreiben
 lookup_kantonale_regierung_parties_label <- elec_kantonale_regierung_combined %>%
-  rename(party_orig_value = Partei) %>%
   mutate(level = NA_character_,
          long_name = NA_character_,
          source = "Kantonale_Regierung",
@@ -591,20 +743,10 @@ lookup_kantonale_regierung_parties_label <- elec_kantonale_regierung_combined %>
          level,
          source) %>%
   # Großschreibung der short_name-Spalte
-  mutate(short_name = toupper(short_name))
-
-
+  mutate(short_name = toupper(short_name)) 
+ 
 # Output prüfen (unique/distinct)
 lookup_kantonale_regierung_parties_label %>% distinct() %>% print(n = Inf)
-
-
-datatable(elec_kantonale_regierung_combined,
-          class = 'nowrap',
-          filter = 'top',
-          options = list(pageLength = 7,
-                         scrollX = TRUE,
-                         search = list(regex = TRUE,
-                                       caseInsensitive = TRUE)))
 ```
 
 ### Gemeindeebene
@@ -623,7 +765,7 @@ datatable(elec_kantonale_regierung_combined,
 
 --\> Datenformat "wide" zuerst bereinigen und ins "long" Format bringen
 
-Dateipfad und gewünschte Sheets festlegen
+##### Dateipfad und gewünschte Sheets festlegen
 
 ```{r}
 #| label: set_path_Gemeinde
@@ -633,7 +775,7 @@ dateipfad <- "data/je-d-17.02.07.01_GEMEINDE_Die Exekutiven der statistischen St
 selected_sheets <- c("2024", "2023", "2022","2021","2020","2019") 
 ```
 
-Function für den Import der Gemeindedaten
+##### Function für den Import der Gemeindedaten
 
 ```{r}
 #| label: load_function_Gemeinde
@@ -720,18 +862,18 @@ importiere_sheet <- function(dateipfad, sheetname) {
     
     daten_long <- daten_wide %>%
       mutate(across(matches("(_Frauen|_Männer|_Total)$"),
-                    ~ suppressWarnings(as.numeric(.)))) %>%     # Werte numerisch
-      pivot_longer(cols = matches("(_Frauen|_Männer|_Total)$"), # Spaltenauswahl
-                   names_to = c("Partei", "m_w_Total"),         # Neue Label-Spalte
-                   names_pattern = "^(.*)_(Frauen|Männer|Total)$",  # RegEx
-                   values_to = "Wert")                          # Neue Wert-Spalte
+                    ~ suppressWarnings(as.numeric(.)))) %>%       # Werte numerisch
+      pivot_longer(cols = matches("(_Frauen|_Männer|_Total)$"),   # Spaltenauswahl
+                   names_to = c("party_orig_value", "m_w_Total"),  # Label-Spalte
+                   names_pattern = "^(.*)_(Frauen|Männer|Total)$",# RegEx
+                   values_to = "Wert")                            # Wert-Spalte
     
     return(daten_long)
 
 }
 ```
 
-Function ausführen: Import der Dateien testen
+##### Function ausführen: Import der Dateien testen
 
 ```{r}
 #| label: run_test_function_Gemeinde
@@ -756,10 +898,10 @@ for (sheet in selected_sheets) {
 }
 ```
 
-Function ausführen: Import und Konsolidation
+##### Function ausführen: Import und Konsolidation
 
 ```{r}
-#| label: run_funciton_Gemeinde
+#| label: run_function_Gemeinde
 
 # Objekt erstellen, mit Sheets als tibble/dataframe
 daten_liste <- setNames(lapply(selected_sheets,
@@ -767,30 +909,61 @@ daten_liste <- setNames(lapply(selected_sheets,
                         selected_sheets)
 
 str(daten_liste)
-lapply(daten_liste, summary)
+# lapply(daten_liste, summary)
+
 
 # Alle tibbles zu einem Dataframe zusammenfügen
 elec_gemeinde_exekutiven_combined <- bind_rows(daten_liste,
-                                            .id = "Sheet") %>% 
-  select(-c('Grössenklasse-Nr.', Grössenklasse))
+                                            .id = "year") %>% 
+  filter(m_w_Total == "Total",
+         party_orig_value != "Total") %>% 
+  mutate(role = "Gemeindeexekutive") %>%
+  rename(election_year = Wahljahr,
+         n_seats = Wert,
+         Kt = Kanton) %>% 
+  select(-c('Grössenklasse-Nr.',
+            Grössenklasse,
+            `Kantons-Nr.`,
+            m_w_Total)) %>%
+  left_join(lookup_kantone, by = "Kt") %>%
+  select(role,
+         party_orig_value,
+         year,
+         election_year,
+         n_seats,
+         Kt,
+         Kanton,
+         everything())
+  
+  
 
 
 
-datatable(elec_gemeinde_exekutiven_combined,
-          class = 'nowrap',
-          filter = 'top',
-          options = list(pageLength = 7,
-                         scrollX = TRUE,
-                         search = list(regex = TRUE,
-                                       caseInsensitive = TRUE)))
+
+# Ratssitze pro Jahr (nach-)prüfen
+elec_gemeinde_exekutiven_sum_check <- elec_gemeinde_exekutiven_combined %>%
+  group_by(year) %>%                         # Gruppieren nach Jahr
+  summarise(summe = sum(n_seats, na.rm = TRUE)) # Summe berechnen, NAs ignorieren
+
+
+
+
+
+# TODO Grosses Datatable, deshalb auskommentieren oder ander Lösung..
+# datatable(elec_gemeinde_exekutiven_combined,
+#           class = 'nowrap',
+#           filter = 'top',
+#           options = list(pageLength = 7,
+#                          scrollX = TRUE,
+#                          search = list(regex = TRUE,
+#                                        caseInsensitive = TRUE)))
 
 
 # Parteinamenvarianten
-unique(elec_gemeinde_exekutiven_combined$Partei)
+unique(elec_gemeinde_exekutiven_combined$party_orig_value)
 
 # Parteien zwecks Lookup/Vereinheitlichung in df schreiben
 lookup_gemeinde_exekutiven_parties_label <- elec_gemeinde_exekutiven_combined %>%
-  rename(party_orig_value = Partei) %>%
   mutate(add_info = str_extract(party_orig_value,
                                 "\\d+(?=\\)?$)"),  # Zahl am Ende/vor Klammer-Ende
          short_name = str_remove(party_orig_value,
@@ -829,15 +1002,6 @@ parties_rating <- read_excel("data/parties_economic_socio-political_rating.xlsx"
 
 ## Lookup tables
 
-### Kantone
-
-```{r}
-
-#TODO?
-lookup_elec_nr_sr_combined_canton_label
-
-```
-
 ### Parteinamen
 
 Die verschiedenen Quellen verwenden teils unteschiedliche Parteibezeichnungen. Zur Vereinheitlichung wird deshalb initial eine Lookup Tabelle gebildet.
@@ -866,7 +1030,7 @@ print(lookup_voting_parties_label %>%
       n = 3)
 
 
-# Alle Dataframes zu einem zusammenführen und Duplikate entfernen
+# Alle Dataframes zu einem zusammenführen, Duplikate entfernen und Master joinen
 lookup_all_parties <- bind_rows(
   lookup_elec_nr_sr_combined_parties_label,
   lookup_kantonale_regierung_parties_label,
@@ -881,9 +1045,8 @@ lookup_all_parties <- bind_rows(
   select(Partei,
          Parteiname,
          everything())
-  
 
-
+write_xlsx(lookup_all_parties, "lookup_all.xlsx")
 ```
 
 # Transformation & visualization
@@ -980,40 +1143,25 @@ voting_5y %>%
 
 ## Wahlen: Parteistärken per Abstimmungstag je Staatsebene
 
-Bundesebene
+##### Bundesebene
 
 ```{r}
 
+elec_nr_sr_combined
 
-# 1. Datumsspalten finden
-date_cols <- grep("^\\d{4}-\\d{2}-\\d{2}$", names(elec_nr_sr_combined), value = TRUE)
+elec_kantonale_regierung_combined
 
-# 2. Gruppieren und Summen berechnen
-result_sum <- elec_nr_sr_combined %>%
-  group_by(PartyName) %>%
-  summarise(across(all_of(date_cols), sum, na.rm = TRUE), .groups = "drop")
+elec_gemeinde_exekutiven_combined
 
-# 3. Prozentwerte berechnen und anfügen
-result_pct <- result_sum %>%
-  mutate(across(
-    all_of(date_cols),
-    ~ . / sum(.) * 100,
-    .names = "{.col}_pct"
-  ))
+lookup_all_parties
 
-# 4. Spaltenreihenfolge anpassen: immer [Datum, Datum_pct, Datum2, Datum2_pct, ...]
-new_order <- c(
-  "PartyName",
-  as.vector(rbind(date_cols, paste0(date_cols, "_pct")))
-)
-
-result_final <- result_pct %>%
-  select(all_of(new_order))
-
-print(result_final)
+# <- elec_nr_sr_combined %>%  select(role,
+#                                                                  Partei,
+#                                                                  starts_with("2"))
 
 
-write_xlsx(result_final, "temp.xlsx")
+
+
 ```
 
 ## Parteilandschaft
