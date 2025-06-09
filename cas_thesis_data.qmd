@@ -119,6 +119,15 @@ lookup_kantone <- data.frame(Kanton = c("Aargau", "Appenzell A. Rh.",
                              stringsAsFactors = FALSE)
 
 
+#Wahlberechtigte seit 1990
+Wahlberechtigte_1990_2024 <- read_excel("data/Wahlberechtigte_1990-2024.xlsx",
+                                        sheet = "pivot_as_value") %>% 
+  rename(year = Jahr,
+         stimmberechtigte_avg = Stimmberechtigte_avg)
+
+# Konsolidierte, bereinigte Lookup-Tabelle einlesen
+lookup_parties_consolidated <- read_excel("data/lookup_parties_consolidated.xlsx")
+
 ```
 
 ## Abstimmungen
@@ -129,10 +138,10 @@ lookup_kantone <- data.frame(Kanton = c("Aargau", "Appenzell A. Rh.",
 
 # Manuell migrierte Lookup Tabellen aus dem PDF-Codebook (swissvotes.ch) laden
 # Parteien
-lookups_codebook_parties <- read_excel("data/lookups_codebook.xlsx",
+lookups_codebook_parties <- read_excel("data/lookup_codebook.xlsx",
                                        sheet = "parties")
 # Parteiparolen
-lookups_codebook_paroles <- read_excel("data/lookups_codebook.xlsx",
+lookups_codebook_paroles <- read_excel("data/lookup_codebook.xlsx",
                                        sheet = "paroles")
 
 
@@ -170,7 +179,6 @@ datatable(voting_5y,
                          search = list(regex = TRUE,
                                        caseInsensitive = TRUE)))
 
-### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
 
 
 # Parteien aus Parolen (p- & pdev-..-..) zwecks Lookup/Vereinheitlichung in df schreiben
@@ -523,20 +531,45 @@ elec_nr_sr_combined <- elec_nr_sr_combined_long %>%
 
 
 # Dataframe analog anderer Staatsebenen in gleiche/ähnliche Struktur bringen
+# elec_nr_sr_combined <- elec_nr_sr_combined_long %>%
+#   rename(party_orig_value = Partei) %>%
+#   group_by(role,
+#            party_orig_value) %>%
+#   mutate(year = election_year) %>%                            # Jahrsspalte
+#   complete(year = full_seq(range(election_year,               # Alle Jahre
+#                                  na.rm = TRUE),
+#                                  1),                          # 1er Sequenz
+#            fill = list(n_seats = NA,
+#                        election_year = NA)) %>%
+#   arrange(role,                                               # Anordnen vor füllen
+#           party_orig_value,
+#           year) %>%
+#   # Block-Index: zählt, wie oft election_year gefüllt ist / neues Wahljahr beginnt
+#   mutate(block = cumsum(!is.na(election_year))) %>%
+#   group_by(role,
+#            party_orig_value,
+#            block) %>%
+#   fill(election_year,
+#        n_seats,
+#        .direction = "down") %>%
+#   ungroup() %>%
+#   mutate(election_year = as.character(election_year)) %>%
+#   select(-block)
+#   
+
 elec_nr_sr_combined <- elec_nr_sr_combined_long %>%
   rename(party_orig_value = Partei) %>%
-  group_by(role,
-           party_orig_value) %>%
-  mutate(year = election_year) %>%                            # Jahrsspalte
-  complete(year = full_seq(range(election_year,               # Alle Jahre
+  group_by(role, party_orig_value) %>%
+  mutate(election_year = as.integer(election_year),   # temporär numerisch
+         year = election_year) %>%
+  complete(year = full_seq(range(election_year,       # Range von election_year
                                  na.rm = TRUE),
-                                 1),                          # 1er Sequenz
+                           1),                        # 1er Sequenz
            fill = list(n_seats = NA,
                        election_year = NA)) %>%
-  arrange(role,                                               # Anordnen vor füllen
+  arrange(role,
           party_orig_value,
           year) %>%
-  # Block-Index: zählt, wie oft election_year gefüllt ist / neues Wahljahr beginnt
   mutate(block = cumsum(!is.na(election_year))) %>%
   group_by(role,
            party_orig_value,
@@ -545,7 +578,11 @@ elec_nr_sr_combined <- elec_nr_sr_combined_long %>%
        n_seats,
        .direction = "down") %>%
   ungroup() %>%
-  select(-block) 
+  mutate(
+    election_year = as.character(election_year),      # zurück als character
+    year = as.character(year)) %>%                    # dito
+  select(-block)
+
 
 
 # Ratssitze pro Jahr (nach-)prüfen
@@ -557,8 +594,6 @@ elec_nr_sr_combined_sum_check <- elec_nr_sr_combined %>%
   print(n=Inf)
               
 unique(elec_nr_sr_combined$party_orig_value)
-
-
 ```
 
 ##### Bund - Parteinamen
@@ -679,7 +714,7 @@ daten_liste <- setNames(lapply(selected_sheets,
                         selected_sheets)
 
 str(daten_liste)
-lapply(daten_liste, summary)
+# lapply(daten_liste, summary)
 
 # Alle tibbles zu einem Dataframe zusammenfügen
 elec_kantonale_regierung_combined <- bind_rows(daten_liste,
@@ -687,7 +722,12 @@ elec_kantonale_regierung_combined <- bind_rows(daten_liste,
   rename(election_year = Wahljahr,
          party_orig_value = Partei,
          n_seats = Wert) %>%
-  mutate(role = "Kantonsregierung") %>% 
+  mutate(role = "Kantonsregierung",
+         
+         election_year = as.character(election_year)
+         
+         
+         ) %>% 
   filter(party_orig_value != "Total") %>%
   left_join(lookup_kantone, by = "Kanton") %>%
   select(role,
@@ -917,10 +957,11 @@ elec_gemeinde_exekutiven_combined <- bind_rows(daten_liste,
                                             .id = "year") %>% 
   filter(m_w_Total == "Total",
          party_orig_value != "Total") %>% 
-  mutate(role = "Gemeindeexekutive") %>%
   rename(election_year = Wahljahr,
          n_seats = Wert,
          Kt = Kanton) %>% 
+  mutate(role = "Gemeindeexekutive",
+         election_year = as.character(election_year)) %>%
   select(-c('Grössenklasse-Nr.',
             Grössenklasse,
             `Kantons-Nr.`,
@@ -935,11 +976,6 @@ elec_gemeinde_exekutiven_combined <- bind_rows(daten_liste,
          Kanton,
          everything())
   
-  
-
-
-
-
 # Ratssitze pro Jahr (nach-)prüfen
 elec_gemeinde_exekutiven_sum_check <- elec_gemeinde_exekutiven_combined %>%
   group_by(year) %>%                         # Gruppieren nach Jahr
@@ -1055,9 +1091,8 @@ write_xlsx(lookup_all_parties, "lookup_all.xlsx")
 
 ```{r}
 
-
 # Relevante Felder selektionieren
-voting_5y %>%
+voting_5y_reduced_fields <- voting_5y %>%
   select(anr,
          datum,
          titel_kurz_d,
@@ -1138,27 +1173,269 @@ voting_5y %>%
          volknein,
          `volkja-proz`)
 
+```
+
+```{r}
+
+voting_5y_plot_data <- voting_5y %>% 
+  select(datum,
+         titel_kurz_d,
+         rechtsform,
+         annahme)
+
+split_list <- voting_5y_plot_data %>%
+  group_by(rechtsform) %>%
+  group_split()      
+
+voting_obli_referendum <- split_list[[1]]
+voting_faku_referendum <- split_list[[2]]
+voting_volksinitiative <- split_list[[3]]
+
+# Heatmap erstellen
+plot_data <- voting_5y_plot_data %>%
+  mutate(annahme = factor(annahme, levels = c("0", "1"), labels = c("Nein", "Ja")))
+
+# Heatmap
+ggplot(plot_data,
+       aes(x = annahme,
+           y = titel_kurz_d,
+           fill = annahme)) +
+  geom_tile(color = "white") +
+  scale_fill_manual(values = c("Nein" = "red", "Ja" = "green")) +
+  labs(
+    title = "Heatmap der Abstimmungsergebnisse",
+    x = "Ergebnis",
+    y = "Vorlage",
+    fill = "Annahme"
+  ) +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 8))
+
+
+
+
+
+plot_data <- voting_5y_plot_data %>%
+  mutate(annahme = factor(annahme, levels = c("0","1"), labels = c("Nein", "Ja")))
+
+levels(plot_data$annahme)
+
+ggplot(plot_data,
+       aes(x = annahme,
+           y = titel_kurz_d,
+           fill = annahme)) +
+  geom_tile(color = "white") +
+  scale_fill_manual(values = c("Nein" = "red", "Ja" = "green")) +
+  labs(
+    title = "Heatmap der Abstimmungsergebnisse",
+    x = "Ergebnis",
+    y = "Vorlage",
+    fill = "Annahme"
+  ) +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 8)) +
+  facet_wrap(~ rechtsform, scales = "free_y")
+
 
 ```
 
 ## Wahlen: Parteistärken per Abstimmungstag je Staatsebene
 
-##### Bundesebene
+### Dataframes kombinieren, Parteinamen vereinheitlichen, alte df löschen
 
 ```{r}
 
-elec_nr_sr_combined
+# Vereinheitlichte Dataframes (Exekutiven je Staatsebene) konsolidieren
+elec_all_combined <- bind_rows(
+  elec_nr_sr_combined,
+  elec_kantonale_regierung_combined,
+  elec_gemeinde_exekutiven_combined)
 
-elec_kantonale_regierung_combined
+# Lookup für einheiltiche Parteinamen anwenden
+elec_all_combined <- elec_all_combined %>%
+  left_join(
+    lookup_parties_consolidated %>% select(Partei, Parteiname, party_orig_value),
+    by = "party_orig_value",
+    relationship = "many-to-many"
+  ) %>%
+  relocate(Partei, Parteiname, .after = party_orig_value)
 
-elec_gemeinde_exekutiven_combined
+# Clean-up: Nacht der Kombinierung nicht mehr benötigte "election" Tabellen löschen
+rm(list = ls(pattern = "^elec_")[       # Objekte die mit elec_ starten aber nicht
+  !grepl("(_all_combined|_all_final)$", # auf all_combined oder all_final enden
+         ls(pattern = "^elec_"))])
+```
 
-lookup_all_parties
+### Parteistärken
 
-# <- elec_nr_sr_combined %>%  select(role,
-#                                                                  Partei,
-#                                                                  starts_with("2"))
+#### Anzahl Sitze & Prozentualer Anteil
 
+##### Jahre eingrenzen
+
+```{r}
+
+# Jahre eingrenzen
+elec_all_combined_input <-  elec_all_combined %>% 
+  filter(year >= "2019")
+
+install.packages("pxR")
+library(pxR)
+Download.file("https://www.pxweb.bfs.admin.ch/sq/4b7bd0ef-0ea4-4d1e-a03e-020895488c92",
+              destfile = "daten.px")
+
+```
+
+##### Staatsebene: National- und Ständerat
+
+```{r}
+#################################################################################
+# Staatsebene
+elec_nr_sr_lvl_state <- elec_all_combined_input %>%
+  filter(role %in% c("Ständerat",
+                     "Nationalrat")) %>%
+  group_by(year,
+           Partei) %>%
+  summarise(n_seats_sum = sum(n_seats,
+                              na.rm = TRUE),
+            .groups = "drop") %>%
+  group_by(year) %>%
+  mutate(n_seats_pct = 100 * n_seats_sum / sum(n_seats_sum, na.rm = TRUE)) %>%
+  ungroup() %>%
+  filter(n_seats_sum > 0)
+```
+
+##### Kantonsebene: Gewichtung nach Stimmberechtigten je Kanton für Aggregation auf Staatslevel 
+
+```{r}
+
+#################################################################################
+# Kantonsebene
+# aggregiert auf Kantonsebene
+elec_kanton_lvl_kt <- elec_all_combined_input %>%
+  filter(role == "Kantonsregierung") %>%
+  group_by(year,
+           Kt,
+           Partei) %>%
+  summarise(n_seats_sum = sum(n_seats,
+                              na.rm = TRUE),
+            .groups = "drop") %>%
+  group_by(year,
+           Kt) %>%
+  mutate(n_seats_pct = 100 * n_seats_sum / sum(n_seats_sum,
+                                               na.rm = TRUE)) %>%
+  ungroup() %>% print(n=30)
+
+
+# aggregiert auf Staatsebene
+elec_kanton_lvl_state <- elec_all_combined_input %>%
+  filter(role == "Kantonsregierung") %>%
+  left_join(Wahlberechtigte_1990_2024,
+            by = c("year",
+                   "Kt")) %>%
+  mutate(n_seats_weighted = n_seats * stimmberechtigte_avg) %>%
+  group_by(year,
+           Partei) %>%
+  summarise(n_seats_sum = sum(n_seats,
+                              na.rm = TRUE),
+            n_seats_sum_weighted = sum(n_seats_weighted,
+                                       na.rm = TRUE),
+            .groups = "drop") %>%
+  group_by(year) %>%
+  mutate(n_seats_pct =
+           100 * n_seats_sum / sum(n_seats_sum,
+                                   na.rm = TRUE),
+         n_seats_pct_weighted =
+           100 * n_seats_sum_weighted / sum(n_seats_sum_weighted,
+                                            na.rm = TRUE)) %>%
+  ungroup()
+```
+
+##### Gemeindeebene: Gewichtung nach Einwohner je Gemeinde aggregiert auf Kanton und Staat 
+
+```{r}
+
+# aggregiert auf Gemeindeebene
+elec_gemeinde_lvl_gemeinde  <- elec_all_combined_input %>%
+  filter(role == "Gemeindeexekutive",
+         n_seats != 0) %>%
+  group_by(year,
+           Gemeinde,
+           Partei) %>%
+  summarise(n_seats_sum = sum(n_seats,
+                              na.rm = TRUE),
+            .groups = "drop") %>%
+  group_by(year,
+           Gemeinde) %>%
+  mutate(n_seats_pct = n_seats_sum / sum(n_seats_sum,
+                                         na.rm = TRUE)) %>%
+  ungroup()
+
+# aggregiert auf Kantonsebene
+elec_gemeinde_lvl_kt <- elec_all_combined_input %>%
+  filter(role == "Gemeindeexekutive",
+         n_seats != 0) %>%
+  group_by(year,
+           Kt,
+           Gemeinde,
+           Partei) %>%
+  summarise(n_seats_sum = sum(n_seats, na.rm = TRUE),
+            Einwohner = first(Einwohner),
+            .groups = "drop") %>%
+  mutate(weighted_seats = n_seats_sum * Einwohner) %>%
+  group_by(year,
+           Kt,
+           Partei) %>%
+  summarise(n_seats_sum = sum(n_seats_sum,                  # ungewichtete Sitze
+                              na.rm = TRUE),
+            n_seats_sum_weighted = sum(weighted_seats,      # gewichtete Sitze
+                                     na.rm = TRUE), 
+            .groups = "drop") %>%
+  group_by(year,
+           Kt) %>%
+  mutate(n_seats_pct =                                      # ungewichtet %
+           n_seats_sum / sum(n_seats_sum,
+                             na.rm = TRUE),
+         n_seats_pct_weighted =                             # gewichtet %  
+           n_seats_sum_weighted / sum(n_seats_sum_weighted,
+                                    na.rm = TRUE)) %>%
+  ungroup()
+
+# aggregiert auf Staatsebene 
+elec_gemeinde_lvl_state <- elec_all_combined_input %>%
+  filter(role == "Gemeindeexekutive",
+         n_seats != 0) %>%
+  group_by(year,
+           Gemeinde,
+           Partei) %>%
+  summarise(n_seats_sum = sum(n_seats,
+                              na.rm = TRUE),
+            Einwohner = first(Einwohner),
+            .groups = "drop") %>%
+  mutate(weighted_seats = n_seats_sum * Einwohner) %>%
+  group_by(year,
+           Partei) %>%
+  summarise(n_seats_sum = sum(n_seats_sum,                   # ungewichtete Sitze
+                              na.rm = TRUE),
+            n_seats_sum_weighted = sum(weighted_seats,       # gewichtete Sitze
+                                       na.rm = TRUE),
+            .groups = "drop") %>%
+  group_by(year) %>%
+  mutate(n_seats_pct =
+           n_seats_sum / sum(n_seats_sum,
+                             na.rm = TRUE),                  # ungewichtet %
+         n_seats_pct_weighted =
+           n_seats_sum_weighted / sum(n_seats_sum_weighted,
+                                      na.rm = TRUE)) %>%     # gewichtet %
+  ungroup()
+```
+
+### Entwicklung über die Jahre 
+
+```{r}
+
+parties_rating
+
+elec_nr_sr_lvl_state
 
 
 
@@ -1216,7 +1493,6 @@ ggplot(parties_rating,
   coord_cartesian(ylim = c(0, 105),
                   xlim = c(0, 105),
                   clip = "off")
-
 ```
 
 #### Durchschnittswerte als Zentrum und Min/Max als Ellipse
