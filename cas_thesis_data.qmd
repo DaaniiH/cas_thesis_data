@@ -1293,6 +1293,19 @@ voting_5y_long <- voting_wide
 ```{r}
 
 str(voting_5y_long)
+
+tmp_voting_5y_long <- voting_5y_long %>%
+  left_join(lookup_all_parties %>% select(party_orig_value,
+                                          Partei),
+            by = c("variable" = "party_orig_value")) %>% 
+   relocate(Partei, .after = variable)
+
+voting_5y_long <- tmp_voting_5y_long
+rm(tmp_voting_5y_long)
+
+#Desc(voting_5y_long)
+colnames(voting_5y_long)
+
 ```
 
 ```{r}
@@ -1418,7 +1431,7 @@ elec_nr_sr_lvl_state <- elec_all_combined_input %>%
   filter(n_seats_sum > 0)
 ```
 
-##### Kantonsebene: Gewichtung nach Stimmberechtigten je Kanton für Aggregation auf Staatslevel 
+##### Kantonsebene: Gewichtung nach Stimmberechtigten je Kanton für Aggregation auf Staatslevel
 
 ```{r}
 
@@ -1467,7 +1480,7 @@ elec_kanton_lvl_state <- elec_all_combined_input %>%
   ungroup()
 ```
 
-##### Gemeindeebene: Gewichtung nach Einwohner je Gemeinde aggregiert auf Kanton und Staat 
+##### Gemeindeebene: Gewichtung nach Einwohner je Gemeinde aggregiert auf Kanton und Staat
 
 ```{r}
 
@@ -1546,7 +1559,7 @@ elec_gemeinde_lvl_state <- elec_all_combined_input %>%
   ungroup()
 ```
 
-### Entwicklung über die Jahre 
+### Entwicklung über die Jahre
 
 elec_gemeinde_lvl_gemeinde
 
@@ -1559,6 +1572,8 @@ elec_kanton_lvl_kt
 elec_kanton_lvl_state
 
 elec_nr_sr_lvl_state
+
+### Übersicht aller elec\_ dataframes
 
 ```{r}
 
@@ -1653,6 +1668,178 @@ for (name in df_names) {
 }
 
 
+
+
+```
+
+### Was wenn - Parolen anwenden
+
+```{r}
+
+# year aus Datum auslesen/hinzufügen als numerischen Wert
+
+elec_nr_sr_lvl_state <- elec_nr_sr_lvl_state %>%
+  mutate(year = as.numeric(year))
+
+elec_kanton_lvl_state <- elec_kanton_lvl_state %>%
+  mutate(year = as.numeric(year))
+
+elec_gemeinde_lvl_state <- elec_gemeinde_lvl_state %>%
+  mutate(year = as.numeric(year))
+
+
+# Spalten selektionieren und Parteistärkem dazu laden
+voting_5y_party_strength <- voting_5y_long %>%
+  filter(!grepl("^pdev-", variable)) %>%      # pdev- vorläufig ausschliessen
+  mutate(year = as.numeric(year(datum))) %>% 
+  select("anr",
+         "year",
+         "datum",
+         "titel_kurz_d",
+         "rechtsform",
+         "dep",
+         "annahme",
+         "berecht",
+         "stimmen",
+         "bet",       # Stimmbeteiligung
+         "leer",
+         "ungultig",
+         "gultig",
+         "volkja",
+         "volknein",
+         "volkja-proz",
+         "Partei",
+         "parole_Nein",
+         "parole_Ja",
+         "parole_keine",
+         ) %>%
+  
+  #National- und Ständerat
+  left_join(
+    elec_nr_sr_lvl_state %>%
+      select(year, Partei, n_seats_sum, n_seats_pct) %>%
+      rename(n_seats_state = n_seats_sum,
+             n_seats_pct_state = n_seats_pct),
+        by = c("year", "Partei")) %>%
+  #Kanton
+  left_join(
+    elec_kanton_lvl_state %>%
+      select(year, Partei,
+             n_seats_sum, n_seats_pct,
+             n_seats_sum_weighted, n_seats_pct_weighted,) %>%
+      rename(n_seats_kanton = n_seats_sum,
+             n_seats_pct_kanton = n_seats_pct,
+             n_seats_sum_weighted_kt = n_seats_sum_weighted,
+             n_seats_pct_weighted_kt = n_seats_pct_weighted,
+             ),
+        by = c("year", "Partei")) %>%
+  #Gemeinde
+  left_join(
+    elec_gemeinde_lvl_state %>%
+      select(year, Partei,
+             n_seats_sum, n_seats_pct,
+             n_seats_sum_weighted, n_seats_pct_weighted,) %>%
+      rename(n_seats_gemeinde = n_seats_sum,
+             n_seats_pct_gemeinde = n_seats_pct,
+             n_seats_sum_weighted_gemeinde = n_seats_sum_weighted,
+             n_seats_pct_weighted_gemeinde = n_seats_pct_weighted,
+             ),
+        by = c("year", "Partei")) %>% 
+  filter(!is.na(Partei))
+
+
+write_xlsx(voting_5y_party_strength, "test_voting_5y_party_strength.xlsx")
+
+
+# Parteistärke anwenden und aufsummieren
+
+#Neue Spalten mit den gewichteten Parolen berechnen
+voting_5y_party_strength_weighted <- voting_5y_party_strength %>%
+  mutate(
+    parole_Nein_wtd_state     = parole_Nein   * n_seats_pct_state,
+    parole_Ja_wtd_state       = parole_Ja     * n_seats_pct_state,
+    parole_Keine_wtd_state    = parole_keine  * n_seats_pct_state,
+    
+    parole_Nein_wtd_kt        = parole_Nein   * n_seats_pct_weighted_kt,
+    parole_Ja_wtd_kt          = parole_Ja     * n_seats_pct_weighted_kt,
+    parole_Keine_wtd_kt       = parole_keine  * n_seats_pct_weighted_kt,
+    
+    parole_Nein_wtd_gem       = parole_Nein   * n_seats_pct_weighted_gemeinde,
+    parole_Ja_wtd_gem         = parole_Ja     * n_seats_pct_weighted_gemeinde,
+    parole_Keine_wtd_gem      = parole_keine  * n_seats_pct_weighted_gemeinde)
+
+#Gruppieren und aufsummieren nach anr und year
+voting_5y_party_strength_summary <- voting_5y_party_strength_weighted %>%
+  group_by(anr, year) %>%
+  summarise(
+    state_parole_Nein       = sum(parole_Nein_wtd_state, na.rm = TRUE),
+    state_parole_Ja         = sum(parole_Ja_wtd_state, na.rm = TRUE),
+    state_parole_Keine      = sum(parole_Keine_wtd_state, na.rm = TRUE),
+    
+    kt_parole_Nein          = sum(parole_Nein_wtd_kt, na.rm = TRUE),
+    kt_parole_Ja            = sum(parole_Ja_wtd_kt, na.rm = TRUE),
+    kt_parole_Keine         = sum(parole_Keine_wtd_kt, na.rm = TRUE),
+    
+    gemeinde_parole_Nein    = sum(parole_Nein_wtd_gem, na.rm = TRUE),
+    gemeinde_parole_Ja     = sum(parole_Ja_wtd_gem, na.rm = TRUE),
+    gemeinde_parole_Keine   = sum(parole_Keine_wtd_gem, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+
+
+# Zusatzinformationen wieder dazu joinen 
+
+
+
+```
+
+```{r}
+
+
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+# Beispiel: für das Jahr 2020
+jahr <- 2020
+
+df_plot <- voting_5y_party_strength_summary %>%
+  filter(year == jahr) %>%
+  select(anr, starts_with("state_parole_")) %>%
+  pivot_longer(
+    cols = starts_with("state_parole_"),
+    names_to = "parole_typ",
+    values_to = "wert"
+  ) %>%
+  mutate(
+    parole_typ = case_when(
+      grepl("_Nein$", parole_typ) ~ "Nein",
+      grepl("_Ja$", parole_typ) ~ "Ja",
+      grepl("_Keine$", parole_typ) ~ "Keine"
+    ),
+    anr = factor(anr, levels = unique(anr)) # Reihenfolge fixieren
+  )
+
+# Plot: jede Zeile ist eine Abstimmung (anr), Balken zeigt die Verteilung Nein/Ja/Keine
+ggplot(df_plot, aes(x = anr, y = wert, fill = parole_typ)) +
+  geom_bar(stat = "identity", position = "fill", width = 1) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  coord_flip() +
+  labs(
+    x = "Abstimmung (anr)",
+    y = "Anteil",
+    fill = "Parole",
+    title = paste("Verteilung Ja/Nein/Keine pro Abstimmung –", jahr)
+  ) +
+  theme_minimal()
+
+
+
+
+```
+
+```{r}
 
 
 ```
