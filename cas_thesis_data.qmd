@@ -123,7 +123,7 @@ lookup_kantone <- data.frame(Kanton = c("Aargau", "Appenzell A. Rh.",
 Wahlberechtigte_1990_2024 <- read_excel("data/Wahlberechtigte_1990-2024.xlsx",
                                         sheet = "pivot_as_value") %>% 
   rename(year = Jahr,
-         stimmberechtigte_avg = Stimmberechtigte_avg)
+         stimmberechtigte_avg_kt = Stimmberechtigte_avg)
 
 # Konsolidierte, bereinigte Lookup-Tabelle einlesen
 lookup_parties_consolidated <- read_excel("data/lookup_parties_consolidated.xlsx")
@@ -1216,7 +1216,6 @@ lookup_parole <- read.table(text = '1\tparole_Ja
                             fill = TRUE,
                             quote = "")
 
-lookup_parole$wert <- as.character(trimws(lookup_parole$wert))
 
 # Lookup für -pos
 lookup_pos <- read.table(text = '.\tpos_Missing
@@ -1236,7 +1235,9 @@ lookup_pos$wert <- as.character(trimws(lookup_pos$wert))
 # 2. Lookup anwenden (Join)
 
 # value als Character
-voting_long$value <- as.character(voting_long$value)
+lookup_parole$wert <- as.character(trimws(lookup_parole$wert))
+lookup_pos$wert <- as.character(trimws(lookup_pos$wert))
+voting_long$value <- as.character(trimws(voting_long$value))
 
 # Join je nach variable-Typ
 voting_long <- voting_long %>%
@@ -1286,293 +1287,12 @@ voting_wide <- voting_long %>%
     values_fill = 0
   )
 
-
-
-
-```
-
-#### Referenztabellen - Erläuterungen gem. Codebook
-
-##### Funktion zur Erstellung der Tabellen
-
-`create_reference_tables()`
-
-Kreiert in sepratem Environment Referenztabellen für Spalten deren Inhalte..
-
--   einstellige Zahlen und/oder
-
--   Präfixe (gemäss Selektion in Funktionsaufruf)
-
-beinhalten, sofern diese nicht bereits bestehen und editiert wurden.
-
-```{r}
-
-create_reference_tables <- function(df,
-                                    exclude_col = NULL,
-                                    ref_env = .GlobalEnv,
-                                    column_prefix = NULL) {
-  library(dplyr)
-  library(purrr)
-  
-  # Werte 0-9
-  is_single_digit_numeric <- function(x) {
-    vals <- unique(na.omit(x))
-    all(vals %in% 0:9) || all(vals %in% as.character(0:9))
-  }
-  
-  # Spaltennamen mit einstelligen Ziffern behalten
-  cols_single_digit <- df %>%
-    { if (!is.null(exclude_col)) select(., -all_of(exclude_col)) else . } %>%
-    select(where(is_single_digit_numeric)) %>%
-    names()
-  
-  
-  # Spaltennamen, die nach Präfix immer berücksichtigt werden
-  cols_force <- character(0)
-  if (!is.null(column_prefix)) {
-    # Alle Spalten, die mit einem der Präfixe beginnen
-    pat <- paste0("^(",
-                  paste(column_prefix,
-                              collapse = "|"),
-                  ")")
-    cols_force <- names(df)[grepl(pat,
-                                  names(df))]
-    # Ausgeschlossene Spalten entfernen
-    if (!is.null(exclude_col)) {
-      cols_force <- setdiff(cols_force,
-                            exclude_col)
-    }
-  }
-  
-  cols_all <- unique(c(cols_single_digit, cols_force))
- 
-  # Reporting-Listen
-  created <- character()
-  existing <- character()
- 
-  # Prüft, ob Referenztabelle existiert und label keine Dummy-Werte enthält (im ref_env)
-  should_overwrite_ref <- function(ref_name, env) {
-    if (!exists(ref_name,
-                envir = env)) return(TRUE)
-    ref_tbl <- get(ref_name,
-                   envir = env)
-    if ("label" %in% names(ref_tbl) && any(!grepl("dummy",
-                                                  ref_tbl$label))) return(FALSE)
-    return(TRUE)
-  }
-  
-  # Referenztabellen ggf. erstellen und ins ref_env laden
-  ref_tables <- map(cols_all, function(col) {
-    ref_name <- paste0("ref_", col)
-    if (should_overwrite_ref(ref_name, ref_env)) {
-      created <<- c(created, ref_name)
-      df %>%
-        distinct(!!sym(col)) %>%
-        arrange(!!sym(col)) %>%
-        mutate(label = paste0(col, "_dummy", row_number()))
-    } else {
-      existing <<- c(existing, ref_name)
-      get(ref_name, envir = ref_env)
-    }
-  })
-  names(ref_tables) <- paste0("ref_", cols_all)
-  list2env(ref_tables, ref_env)
-  
-  # Rückgabe als Liste für weitere Auswertung oder Ausgabe
-  list(
-    created = created,
-    existing = existing,
-    ref_names = names(ref_tables),
-    ref_env = ref_env
-  )
-}
-```
-
-##### Funktion zur Bildung der Refernztabellen ausführen 
-
-ggf. Wiederholen nach Bearbeitung um verbleibende anzuschauen.
-
-```{r}
-
-# Separates Environment für Referenztabellen anlegen
-if (!exists("ref_env")) {
-  ref_env <- new.env()
-}
-
-# Funktion ausführen / Speichern
-result <- create_reference_tables(df = voting_5y_reduced_fields,
-                                  exclude_col = "anr",
-                                  ref_env = ref_env,
-                                  column_prefix = c("p-",
-                                                    "pdev-",
-                                                    "-pos"))
-# Kreierte, zum bearbeiten
-result$created
-
-# Existierende (falls Inhalt von "dummy"-Werte abweicht)
-result$existing
-
-# Alle
-result$ref_names
-```
-
-Ggfs. Betrachten / Löschen
-
-```{r}
-
-# Einzelne abfragen
-# get("ref_p-svp", envir = ref_env)
-# get("ref_pdev-x", envir = ref_env)
-
-
-# Einzelne Referenz-Tabellen wieder löschen (Eingabe via Konsole)
-# ref_tables_to_remove <- scan(what = character())
-# rm(list = to_remove, envir = .GlobalEnv)
-
-```
-
-#####  Referenz-Tabellen bearbeiten
-
-```{r}
-
-####################################
-#### ref_p & ref_pdev
-####################################
-
-# Präfix-Pattern für ref_p- und ref_pdev-
-pattern <- "^ref_p(dev)?-"
-
-# Label-Vektor 
-labels_vec <- c(
-  # Lookup für ref_p & ref_pdev-
-  "1\tJa-Parole",
-  "2\tNein-Parole",
-  "3\tkeine Parole",
-  "4\tEnthaltung",
-  "5\tkeine Parole",
-  "8\tGegenentwurf (Stichfrage))",
-  "9\tVolksinitiative (Stichfrage)",
-  "66\tkeine Parole",
-  ".\tkeine Parole",
-  "9999\tkeine Parole",
-  "\tkeine Parole"
-  )
-
-# Vektor Dataframe umwandeln
-labels_df <- read.table(text = labels_vec,
-  sep = "\t",
-  col.names = c("wert", "label"),
-  stringsAsFactors = FALSE,
-  fill = TRUE,
-  quote = ""
-)
-
-# Selektiere Namen, mit ref_p- oder ref_pdev- beginnend & KEIN 'others' enthalten
-sel_names <- result$created[
-  grepl(pattern,
-        result$created) & !grepl("others",
-                                 result$created)
-]
-
-for (obj_name in sel_names) {
-  ref_tbl <- get(obj_name, envir = ref_env)
-  value_col <- setdiff(names(ref_tbl), "label")  # Spaltenname mit den Werten
-
-  # Werte als Character für den Join
-  ref_tbl[[value_col]] <- as.character(ref_tbl[[value_col]])
-  labels_df$wert <- as.character(labels_df$wert)
-
-  # Join nach Wert-Spalte
-  ref_tbl <- left_join(ref_tbl, labels_df, by = setNames("wert", value_col))
-
-  # label-Spalte ersetzen
-  ref_tbl$label <- ref_tbl$label.y
-  ref_tbl$label.y <- NULL
-  ref_tbl$label.x <- NULL
-
-  assign(obj_name, ref_tbl, envir = ref_env)
-
-  # Optional: Melde unbekannte Werte
-  if (any(is.na(ref_tbl$label))) {
-    cat("\n", obj_name, " (neue/unbekannte Werte):\n", sep = "")
-    print(ref_tbl[is.na(ref_tbl$label), , drop = FALSE])
-  }
-}
+voting_5y_long <- voting_wide
 ```
 
 ```{r}
 
-####################################
-#### -pos
-####################################
-
-# Präfix-Pattern für ref_p- und ref_pdev-
-pattern <- "-pos"
-
-# Label-Vektor 
-labels_vec <- c(
-  ".\tMissing",
-  "1\tBefürwortend",
-  "2\tAblehnend",
-  "3\tKeine",
-  "8\tVorzug Gegenentwurf (bei Stichfragen)",
-  "9\tVorzug Volksinitiative (bei Stichfragen)")
-
-# Vektor Dataframe umwandeln
-labels_df <- read.table(text = labels_vec,
-                        sep = "\t",
-                        col.names = c("wert", "label"),
-                        stringsAsFactors = FALSE,
-                        fill = TRUE,
-                        quote = "")
-
-# Selektiere Namen, mit ref_p- oder ref_pdev- beginnend & KEIN 'others' enthalten
-sel_names <- result$created[
-  grepl(pattern,
-        result$created) & !grepl("others",
-                                 result$created)
-]
-
-for (obj_name in sel_names) {
-  ref_tbl <- get(obj_name, envir = ref_env)
-  value_col <- setdiff(names(ref_tbl), "label")  # Spaltenname mit den Werten
-
-  # Werte als Character für den Join
-  ref_tbl[[value_col]] <- as.character(ref_tbl[[value_col]])
-  labels_df$wert <- as.character(labels_df$wert)
-
-  # Join nach Wert-Spalte
-  ref_tbl <- left_join(ref_tbl, labels_df, by = setNames("wert", value_col))
-
-  # label-Spalte ersetzen
-  ref_tbl$label <- ref_tbl$label.y
-  ref_tbl$label.y <- NULL
-  ref_tbl$label.x <- NULL
-
-  assign(obj_name, ref_tbl, envir = ref_env)
-
-  # Optional: Melde unbekannte Werte
-  if (any(is.na(ref_tbl$label))) {
-    cat("\n", obj_name, " (neue/unbekannte Werte):\n", sep = "")
-    print(ref_tbl[is.na(ref_tbl$label), , drop = FALSE])
-  }
-}
-```
-
-```{r}
-
-get("ref_p-svp", envir = ref_env)
-
-
-```
-
-```{r}
-
-voting_5y_reduced_fields
-
-
-
-
+str(voting_5y_long)
 ```
 
 ```{r}
@@ -1660,10 +1380,10 @@ elec_all_combined <- elec_all_combined %>%
   ) %>%
   relocate(Partei, Parteiname, .after = party_orig_value)
 
-# Clean-up: Nacht der Kombinierung nicht mehr benötigte "election" Tabellen löschen
-rm(list = ls(pattern = "^elec_")[       # Objekte die mit elec_ starten aber nicht
-  !grepl("(_all_combined|_all_final)$", # auf all_combined oder all_final enden
-         ls(pattern = "^elec_"))])
+# # Clean-up: Nacht der Kombinierung nicht mehr benötigte "election" Tabellen löschen
+# rm(list = ls(pattern = "^elec_")[       # Objekte die mit elec_ starten aber nicht
+#   !grepl("(_all_combined|_all_final)$", # auf all_combined oder all_final enden
+#          ls(pattern = "^elec_"))])
 ```
 
 ### Parteistärken
@@ -1723,16 +1443,19 @@ elec_kanton_lvl_kt <- elec_all_combined_input %>%
 # aggregiert auf Staatsebene
 elec_kanton_lvl_state <- elec_all_combined_input %>%
   filter(role == "Kantonsregierung") %>%
-  left_join(Wahlberechtigte_1990_2024,
-            by = c("year",
-                   "Kt")) %>%
-  mutate(n_seats_weighted = n_seats * stimmberechtigte_avg) %>%
+  left_join(Wahlberechtigte_1990_2024 %>%
+              group_by(year) %>% 
+              summarise(stimmberechtigte_avg_state = sum(stimmberechtigte_avg_kt,
+                                                         na.rm = TRUE)),
+    by = "year") %>%
+  mutate(n_seats_weighted = n_seats * stimmberechtigte_avg_state) %>%
   group_by(year,
            Partei) %>%
   summarise(n_seats_sum = sum(n_seats,
                               na.rm = TRUE),
             n_seats_sum_weighted = sum(n_seats_weighted,
                                        na.rm = TRUE),
+            stimmberechtigte_avg_state = first(stimmberechtigte_avg_state),
             .groups = "drop") %>%
   group_by(year) %>%
   mutate(n_seats_pct =
@@ -1760,7 +1483,7 @@ elec_gemeinde_lvl_gemeinde  <- elec_all_combined_input %>%
             .groups = "drop") %>%
   group_by(year,
            Gemeinde) %>%
-  mutate(n_seats_pct = n_seats_sum / sum(n_seats_sum,
+  mutate(n_seats_pct = 100* n_seats_sum / sum(n_seats_sum,
                                          na.rm = TRUE)) %>%
   ungroup()
 
@@ -1786,10 +1509,10 @@ elec_gemeinde_lvl_kt <- elec_all_combined_input %>%
             .groups = "drop") %>%
   group_by(year,
            Kt) %>%
-  mutate(n_seats_pct =                                      # ungewichtet %
+  mutate(n_seats_pct = 100 *                                # ungewichtet %
            n_seats_sum / sum(n_seats_sum,
                              na.rm = TRUE),
-         n_seats_pct_weighted =                             # gewichtet %  
+         n_seats_pct_weighted = 100 *                       # gewichtet %  
            n_seats_sum_weighted / sum(n_seats_sum_weighted,
                                     na.rm = TRUE)) %>%
   ungroup()
@@ -1814,10 +1537,10 @@ elec_gemeinde_lvl_state <- elec_all_combined_input %>%
                                        na.rm = TRUE),
             .groups = "drop") %>%
   group_by(year) %>%
-  mutate(n_seats_pct =
+  mutate(n_seats_pct = 100 *
            n_seats_sum / sum(n_seats_sum,
                              na.rm = TRUE),                  # ungewichtet %
-         n_seats_pct_weighted =
+         n_seats_pct_weighted = 100 *
            n_seats_sum_weighted / sum(n_seats_sum_weighted,
                                       na.rm = TRUE)) %>%     # gewichtet %
   ungroup()
@@ -1825,11 +1548,110 @@ elec_gemeinde_lvl_state <- elec_all_combined_input %>%
 
 ### Entwicklung über die Jahre 
 
+elec_gemeinde_lvl_gemeinde
+
+elec_gemeinde_lvl_kt
+
+elec_gemeinde_lvl_state
+
+elec_kanton_lvl_kt
+
+elec_kanton_lvl_state
+
+elec_nr_sr_lvl_state
+
 ```{r}
+
+elec_gemeinde_lvl_gemeinde
+elec_gemeinde_lvl_kt
+elec_gemeinde_lvl_state
+elec_kanton_lvl_kt
+elec_kanton_lvl_state
+elec_nr_sr_lvl_state
+
 
 parties_rating
 
 elec_nr_sr_lvl_state
+
+# Liste der Dataframes
+df_names <- c(
+  "elec_gemeinde_lvl_gemeinde",
+  "elec_gemeinde_lvl_kt",
+  "elec_gemeinde_lvl_state",
+  "elec_kanton_lvl_kt",
+  "elec_kanton_lvl_state",
+  "elec_nr_sr_lvl_state"
+)
+
+df_overview <- function(df_name) {
+  df <- get(df_name)
+  cat("====", df_name, "====\n")
+  cat("Anzahl Zeilen:", nrow(df), "\n")
+  cat("Anzahl Spalten:", ncol(df), "\n")
+  cat("Spaltennamen:\n")
+  print(names(df))
+  
+  # Dynamische Sortierung: Nur vorhandene Spalten werden verwendet
+  sort_cols <- c()
+  sort_orders <- c()
+  
+  # 1) year (aufsteigend)
+  if ("year" %in% names(df)) {
+    df$year <- as.numeric(df$year)
+    sort_cols <- c(sort_cols, "year")
+    sort_orders <- c(sort_orders, TRUE) # TRUE = aufsteigend
+  }
+  # 2) Gemeinde (alphabetisch)
+  if ("Gemeinde" %in% names(df)) {
+    sort_cols <- c(sort_cols, "Gemeinde")
+    sort_orders <- c(sort_orders, TRUE)
+  }
+  # 3) Kt (alphabetisch)
+  if ("Kt" %in% names(df)) {
+    sort_cols <- c(sort_cols, "Kt")
+    sort_orders <- c(sort_orders, TRUE)
+  }
+  # 4) n_seats_sum (absteigend)
+  if ("n_seats_sum" %in% names(df)) {
+    df$n_seats_sum <- as.numeric(df$n_seats_sum)
+    sort_cols <- c(sort_cols, "n_seats_sum")
+    sort_orders <- c(sort_orders, FALSE) # FALSE = absteigend
+  }
+  
+  # Sortiere Dataframe, falls mindestens eine Sortierspalte vorhanden ist
+  if (length(sort_cols) > 0) {
+    # Erzeuge eine Liste von Spalten für do.call(order, ...)
+    order_args <- lapply(seq_along(sort_cols), function(i) {
+      col <- df[[sort_cols[i]]]
+      if (!sort_orders[i]) -col else col
+    })
+    df <- df[do.call(order, order_args), ]
+  }
+  
+  # Prüfung auf gültige Zahlen in n_seats_sum
+  if ("n_seats_sum" %in% names(df)) {
+    valid_rows <- !is.na(df$n_seats_sum) & is.finite(as.numeric(df$n_seats_sum))
+    if (any(!valid_rows)) {
+      last_valid_row <- which(!valid_rows)[1] - 1
+    } else {
+      last_valid_row <- nrow(df)
+    }
+    rows_to_show <- 1:max(1, last_valid_row)
+    cat("Zeilen mit Zahlen in 'n_seats_sum' (sortiert):\n")
+    print(df[rows_to_show, , drop = FALSE])
+  } else {
+    cat("Erste 3 Zeilen:\n")
+    print(head(df, 3))
+  }
+  cat("\n\n")
+}
+
+# Übersicht für alle Dataframes erstellen
+for (name in df_names) {
+  df_overview(name)
+}
+
 
 
 
