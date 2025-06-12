@@ -38,9 +38,12 @@ library(purrr)
 library(writexl)  # Write Excel files
 
 library(dplyr)
+library(tidyr)
 library(tidyverse)
 library(ggplot2)  # Diagrams
 library(ggforce)  # Diagrams
+library(plotly)
+
 library(DT)       # datatable()
 
 library(DescTools)
@@ -62,7 +65,6 @@ find_and_remove_duplicates <- function(df) {
 }
 
 
-
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###  
 # Aktive National- & Ständeräte identifizieren und selektionierbar machen
 
@@ -75,15 +77,6 @@ filter_active <- function(data, von, bis) {
       is.na(DateLeaving) | DateLeaving >= von  # Kein Austritt/nach Beginn des Z..
     )
 }
-
-
-
-
-### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###  
-# 
-
-
-
 
 ```
 
@@ -102,6 +95,8 @@ filter_active <- function(data, von, bis) {
 ## Lookup Tabellen
 
 ```{r}
+#| label: load_lookups
+
 
 # Dataframe bilden für Lookup der Kantonsnamen/-Kürzel
 lookup_kantone <- data.frame(Kanton = c("Aargau", "Appenzell A. Rh.",
@@ -599,6 +594,7 @@ unique(elec_nr_sr_combined$party_orig_value)
 ##### Bund - Parteinamen
 
 ```{r}
+#| label: tbd
 
 # Partei-Labels identifizieren
 lookup_elec_nr_sr_combined_parties_label  <- elec_nr_sr_combined %>%
@@ -760,6 +756,7 @@ datatable(elec_kantonale_regierung_combined,
 ##### Kanton - Parteinamen
 
 ```{r}
+#| label: tbd
 
 # Parteinamenvarianten
 unique(elec_kantonale_regierung_combined$party_orig_value)
@@ -1090,6 +1087,7 @@ write_xlsx(lookup_all_parties, "lookup_all.xlsx")
 ## Abstimmungen
 
 ```{r}
+#| label: tbd
 
 # Relevante Felder selektionieren
 voting_5y_reduced_fields <- voting_5y %>%
@@ -1180,7 +1178,7 @@ voting_5y_reduced_fields <- voting_5y %>%
 ```
 
 ```{r}
-
+#| label: tbd
 
 # Spaltennamen extrahieren, die ins Long Format sollen
 sel_cols <- names(voting_5y_reduced_fields)[
@@ -1291,6 +1289,7 @@ voting_5y_long <- voting_wide
 ```
 
 ```{r}
+#| label: tbd
 
 str(voting_5y_long)
 
@@ -1377,6 +1376,7 @@ ggplot(plot_data,
 ### Dataframes kombinieren, Parteinamen vereinheitlichen, alte df löschen
 
 ```{r}
+#| label: tbd
 
 # Vereinheitlichte Dataframes (Exekutiven je Staatsebene) konsolidieren
 elec_all_combined <- bind_rows(
@@ -1406,6 +1406,7 @@ elec_all_combined <- elec_all_combined %>%
 ##### Jahre eingrenzen
 
 ```{r}
+#| label: tbd
 
 # Jahre eingrenzen
 elec_all_combined_input <-  elec_all_combined %>% 
@@ -1415,6 +1416,8 @@ elec_all_combined_input <-  elec_all_combined %>%
 ##### Staatsebene: National- und Ständerat
 
 ```{r}
+#| label: tbd
+
 #################################################################################
 # Staatsebene
 elec_nr_sr_lvl_state <- elec_all_combined_input %>%
@@ -1434,6 +1437,7 @@ elec_nr_sr_lvl_state <- elec_all_combined_input %>%
 ##### Kantonsebene: Gewichtung nach Stimmberechtigten je Kanton für Aggregation auf Staatslevel
 
 ```{r}
+#| label: tbd
 
 #################################################################################
 # Kantonsebene
@@ -1483,6 +1487,7 @@ elec_kanton_lvl_state <- elec_all_combined_input %>%
 ##### Gemeindeebene: Gewichtung nach Einwohner je Gemeinde aggregiert auf Kanton und Staat
 
 ```{r}
+#| label: tbd
 
 # aggregiert auf Gemeindeebene
 elec_gemeinde_lvl_gemeinde  <- elec_all_combined_input %>%
@@ -1576,6 +1581,8 @@ elec_nr_sr_lvl_state
 ### Übersicht aller elec\_ dataframes
 
 ```{r}
+#| label: tbd
+
 
 elec_gemeinde_lvl_gemeinde
 elec_gemeinde_lvl_kt
@@ -1675,6 +1682,7 @@ for (name in df_names) {
 ### Was wenn - Parolen anwenden
 
 ```{r}
+#| label: tbd
 
 # year aus Datum auslesen/hinzufügen als numerischen Wert
 
@@ -1770,7 +1778,7 @@ voting_5y_party_strength_weighted <- voting_5y_party_strength %>%
 
 #Gruppieren und aufsummieren nach anr und year
 voting_5y_party_strength_summary <- voting_5y_party_strength_weighted %>%
-  group_by(anr, year) %>%
+  group_by(anr, year, annahme) %>%
   summarise(
     state_parole_Nein       = sum(parole_Nein_wtd_state, na.rm = TRUE),
     state_parole_Ja         = sum(parole_Ja_wtd_state, na.rm = TRUE),
@@ -1781,7 +1789,7 @@ voting_5y_party_strength_summary <- voting_5y_party_strength_weighted %>%
     kt_parole_Keine         = sum(parole_Keine_wtd_kt, na.rm = TRUE),
     
     gemeinde_parole_Nein    = sum(parole_Nein_wtd_gem, na.rm = TRUE),
-    gemeinde_parole_Ja     = sum(parole_Ja_wtd_gem, na.rm = TRUE),
+    gemeinde_parole_Ja      = sum(parole_Ja_wtd_gem, na.rm = TRUE),
     gemeinde_parole_Keine   = sum(parole_Keine_wtd_gem, na.rm = TRUE),
     .groups = "drop"
   )
@@ -1795,11 +1803,7 @@ voting_5y_party_strength_summary <- voting_5y_party_strength_weighted %>%
 ```
 
 ```{r}
-
-
-library(dplyr)
-library(tidyr)
-library(ggplot2)
+#| label: tbd
 
 # Beispiel: für das Jahr 2020
 jahr <- 2020
@@ -1835,13 +1839,251 @@ ggplot(df_plot, aes(x = anr, y = wert, fill = parole_typ)) +
   theme_minimal()
 
 
+```
+
+```{r}
+
+# Tatsächliches Abstiummungsergebnis (annahme) auch abbilden
+
+jahr <- 2020
+
+# Daten für den Balkenplot vorbereiten
+df_plot <- voting_5y_party_strength_summary %>%
+  filter(year == jahr) %>%
+  select(anr, starts_with("state_parole_")) %>%
+  pivot_longer(
+    cols = starts_with("state_parole_"),
+    names_to = "parole_typ",
+    values_to = "wert"
+  ) %>%
+  mutate(
+    parole_typ = case_when(
+      grepl("_Nein$", parole_typ) ~ "Nein",
+      grepl("_Ja$", parole_typ) ~ "Ja",
+      grepl("_Keine$", parole_typ) ~ "Keine"
+    ),
+    anr = factor(anr, levels = unique(anr)) # Reihenfolge fixieren
+  )
+
+# Annahme-Daten für die Punkte vorbereiten
+df_annahme <- voting_5y_party_strength_summary %>%
+  filter(year == jahr) %>%
+  select(anr, annahme) %>%
+  mutate(
+    anr = factor(anr, levels = unique(df_plot$anr)),
+    annahme = as.numeric(annahme) # Annahme: 0 oder 1
+  )
+
+# Plot mit Balken und Annahme-Punkt
+ggplot() +
+  geom_bar(
+    data = df_plot,
+    mapping = aes(x = anr, y = wert, fill = parole_typ),
+    stat = "identity",
+    position = "fill",
+    width = 1
+  ) +
+  geom_point(
+    data = df_annahme,
+    mapping = aes(x = anr, y = annahme),
+    color = "black", size = 3
+  ) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  coord_flip() +
+  labs(
+    x = "Abstimmung (anr)",
+    y = "Anteil",
+    fill = "Parole",
+    title = paste("Verteilung Ja/Nein/Keine pro Abstimmung –", jahr)
+  ) +
+  theme_minimal()
+
 
 
 ```
 
 ```{r}
 
+# tatsächliches Abstiummungsergebnis bei 0 (0) oder 100% (1) als PUnkt darstellen.
 
+
+jahr <- 2020
+
+df_plot <- voting_5y_party_strength_summary %>%
+  filter(year == jahr) %>%
+  select(anr, 
+         starts_with("state_parole_"), 
+         starts_with("kt_parole_"), 
+         starts_with("gemeinde_parole_")) %>%
+  pivot_longer(
+    cols = -anr,
+    names_to = "parole_spalte",
+    values_to = "wert"
+  ) %>%
+  mutate(
+    # Parole-Typ extrahieren (Ja/Nein/Keine)
+    parole_typ = case_when(
+      grepl("_Nein$", parole_spalte) ~ "Nein",
+      grepl("_Ja$", parole_spalte) ~ "Ja",
+      grepl("_Keine$", parole_spalte) ~ "Keine"
+    ),
+    # Parolen-Ebene extrahieren (state/kt/gemeinde)
+    parole_ebene = case_when(
+      grepl("^state_parole_", parole_spalte) ~ "Bund",
+      grepl("^kt_parole_", parole_spalte) ~ "Kanton",
+      grepl("^gemeinde_parole_", parole_spalte) ~ "Gemeinde"
+    ),
+    anr = factor(anr, levels = unique(anr))
+  )
+
+# Beispielplot: Facetten nach Parolenebene
+ggplot(df_plot, aes(x = anr, y = wert, fill = parole_typ)) +
+  geom_bar(stat = "identity", position = "fill", width = 1) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  coord_flip() +
+  facet_wrap(~parole_ebene, ncol = 1) +
+  labs(
+    x = "Abstimmung (anr)",
+    y = "Anteil",
+    fill = "Parole",
+    title = paste("Verteilung Ja/Nein/Keine pro Abstimmung –", jahr)
+  ) +
+  theme_minimal()
+
+
+```
+
+```{r}
+
+# nicht nur state_parole_ sondern auch kt_parole_ und gemeinde_parole_ anzeigen.
+
+jahr <- 2020
+
+# Daten für den Balkenplot vorbereiten (alle parole-Spalten, Quelle extrahieren)
+df_plot <- voting_5y_party_strength_summary %>%
+  filter(year == jahr) %>%
+  select(anr, matches("^(state|kt|gemeinde)_parole_")) %>%
+  pivot_longer(
+    cols = matches("^(state|kt|gemeinde)_parole_"),
+    names_to = "parole_typ",
+    values_to = "wert"
+  ) %>%
+  mutate(
+    parole_quelle = case_when(
+      grepl("^state_parole_", parole_typ) ~ "Kanton",
+      grepl("^kt_parole_", parole_typ) ~ "Kantonale Partei",
+      grepl("^gemeinde_parole_", parole_typ) ~ "Gemeinde"
+    ),
+    parole_typ = case_when(
+      grepl("_Nein$", parole_typ) ~ "Nein",
+      grepl("_Ja$", parole_typ) ~ "Ja",
+      grepl("_Keine$", parole_typ) ~ "Keine"
+    ),
+    anr = factor(anr, levels = unique(anr)),
+    parole_quelle = factor(parole_quelle, levels = c("Kanton", "Kantonale Partei", "Gemeinde"))
+  )
+
+# Annahme-Daten für die Punkte vorbereiten
+df_annahme <- voting_5y_party_strength_summary %>%
+  filter(year == jahr) %>%
+  select(anr, annahme) %>%
+  mutate(
+    anr = factor(anr, levels = unique(df_plot$anr)),
+    annahme = as.numeric(annahme) # Annahme: 0 oder 1
+  )
+
+# Plot mit Balken und Annahme-Punkt, getrennt nach parole_quelle
+ggplot() +
+  geom_bar(
+    data = df_plot,
+    mapping = aes(x = anr, y = wert, fill = parole_typ),
+    stat = "identity",
+    position = "fill",
+    width = 1
+  ) +
+  geom_point(
+    data = df_annahme,
+    mapping = aes(x = anr, y = annahme),
+    color = "black", size = 3
+  ) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  coord_flip() +
+  facet_wrap(~ parole_quelle, ncol = 1, scales = "free_y") +
+  labs(
+    x = "Abstimmung (anr)",
+    y = "Anteil",
+    fill = "Parole",
+    title = paste("Verteilung Ja/Nein/Keine pro Abstimmung –", jahr)
+  ) +
+  theme_minimal()
+
+
+```
+
+```{r}
+
+# Gruppierung nach Abstimmung (anr)
+
+jahr <- 2020
+
+# Daten für den Balkenplot vorbereiten (alle parole-Spalten, Quelle extrahieren)
+df_plot <- voting_5y_party_strength_summary %>%
+  filter(year == jahr) %>%
+  select(anr, matches("^(state|kt|gemeinde)_parole_")) %>%
+  pivot_longer(
+    cols = matches("^(state|kt|gemeinde)_parole_"),
+    names_to = "parole_typ",
+    values_to = "wert"
+  ) %>%
+  mutate(
+    parole_quelle = case_when(
+      grepl("^state_parole_", parole_typ) ~ "Kanton",
+      grepl("^kt_parole_", parole_typ) ~ "Kantonale Partei",
+      grepl("^gemeinde_parole_", parole_typ) ~ "Gemeinde"
+    ),
+    parole_typ = case_when(
+      grepl("_Nein$", parole_typ) ~ "Nein",
+      grepl("_Ja$", parole_typ) ~ "Ja",
+      grepl("_Keine$", parole_typ) ~ "Keine"
+    ),
+    parole_quelle = factor(parole_quelle, levels = c("Kanton", "Kantonale Partei", "Gemeinde")),
+    anr = factor(anr, levels = unique(anr))
+  )
+
+# Annahme-Daten für die Punkte vorbereiten
+df_annahme <- voting_5y_party_strength_summary %>%
+  filter(year == jahr) %>%
+  select(anr, annahme) %>%
+  mutate(
+    anr = factor(anr, levels = unique(df_plot$anr)),
+    annahme = as.numeric(annahme)
+  )
+
+# Plot: Gruppierung nach Abstimmung (anr)
+ggplot() +
+  geom_bar(
+    data = df_plot,
+    mapping = aes(x = parole_quelle, y = wert, fill = parole_typ),
+    stat = "identity",
+    position = "fill",
+    width = 0.7
+  ) +
+  geom_point(
+    data = df_annahme,
+    mapping = aes(x = 2, y = annahme), # x=2: Punkt mittig bei "Kantonale Partei"
+    color = "black", size = 3, inherit.aes = FALSE
+  ) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  facet_wrap(~ anr, ncol = 1) +
+  labs(
+    x = "Quelle der Parole",
+    y = "Anteil",
+    fill = "Parole",
+    title = paste("Verteilung Ja/Nein/Keine nach Quelle pro Abstimmung –", jahr)
+  ) +
+  theme_minimal()
+
+# TODO: Nicht nur pro Jahr sondern auch Departement? Tatsächliche ja/nein/enthalten hinzufügen.
 ```
 
 ## Parteilandschaft
@@ -1853,6 +2095,7 @@ ggplot(df_plot, aes(x = anr, y = wert, fill = parole_typ)) +
 Für jede Partei den Minimalwert des Abstimmungsverhaltens zu verwenden, basiert auf der Zielsetzung, die klarste politische Position einer Partei in einem bestimmten Themenbereich zu identifizieren. Diese Methodik stellt sicher, dass auch bei wenigen Abweichungen von der Mehrheitslinie die tatsächliche Haltung der Partei deutlich erkennbar bleibt.
 
 ```{r}
+#| label: tbd
 
 ggplot(parties_rating,
        aes(x = eco_pct_min_x,
@@ -1901,6 +2144,7 @@ ggplot(parties_rating,
 #### Durchschnittswerte als Zentrum und Min/Max als Ellipse
 
 ```{r}
+#| label: tbd
 
 ggplot(parties_rating,
        aes(x = eco_pct_avg_x,
@@ -1955,6 +2199,7 @@ ggplot(parties_rating,
 #### Hauptparteien: Durchschnittswerte als Zentrum und Min/Max als Ellipse / Klein- und Regionalparteien nur mit ihrem Durchschnittswert
 
 ```{r}
+#| label: tbd
 
 ggplot(parties_rating,
        aes(x = eco_pct_avg_x,
@@ -2025,6 +2270,7 @@ ggplot(parties_rating,
 #### Hauptparteien: Durchschnittswerte als Zentrum und Min/Max als Ellipse / Verbände sowie Klein- und Regionalparteien nur mit ihrem Durchschnittswert
 
 ```{r}
+#| label: tbd
 
 ggplot(parties_rating,
        aes(x = eco_pct_avg_x,
@@ -2099,9 +2345,8 @@ ggplot(parties_rating,
 ### 3D-Koordinatensystem (Testweise)
 
 ```{r}
-#install.packages("plotly")
+#| label: tbd
 
-library(plotly)
 
 # Datenframe erstellen
 parties <- data.frame(
@@ -2135,7 +2380,7 @@ fig <- fig %>% layout(
 )
 
 # Plot anzeigen
-fig
+
 
 
 ```
