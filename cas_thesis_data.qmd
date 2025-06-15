@@ -26,7 +26,6 @@ theme: bootstrap
 ```{r}
 #| label: load_libraries
 
-
 library(readr)
 library(readxl)
 library(pxmake)   # to load PX files
@@ -594,7 +593,7 @@ unique(elec_nr_sr_combined$party_orig_value)
 ##### Bund - Parteinamen
 
 ```{r}
-#| label: tbd
+
 
 # Partei-Labels identifizieren
 lookup_elec_nr_sr_combined_parties_label  <- elec_nr_sr_combined %>%
@@ -756,7 +755,7 @@ datatable(elec_kantonale_regierung_combined,
 ##### Kanton - Parteinamen
 
 ```{r}
-#| label: tbd
+
 
 # Parteinamenvarianten
 unique(elec_kantonale_regierung_combined$party_orig_value)
@@ -1087,7 +1086,7 @@ write_xlsx(lookup_all_parties, "lookup_all.xlsx")
 ## Abstimmungen
 
 ```{r}
-#| label: tbd
+
 
 # Relevante Felder selektionieren
 voting_5y_reduced_fields <- voting_5y %>%
@@ -1178,7 +1177,7 @@ voting_5y_reduced_fields <- voting_5y %>%
 ```
 
 ```{r}
-#| label: tbd
+
 
 # Spaltennamen extrahieren, die ins Long Format sollen
 sel_cols <- names(voting_5y_reduced_fields)[
@@ -1289,7 +1288,7 @@ voting_5y_long <- voting_wide
 ```
 
 ```{r}
-#| label: tbd
+
 
 str(voting_5y_long)
 
@@ -1373,25 +1372,46 @@ ggplot(plot_data,
 
 ## Wahlen: Parteistärken per Abstimmungstag je Staatsebene
 
-### Dataframes kombinieren, Parteinamen vereinheitlichen, alte df löschen
+### Dataframes kombinieren, Parteinamen vereinheitlichen, alte df löschen (opt.)
 
 ```{r}
-#| label: tbd
+
 
 # Vereinheitlichte Dataframes (Exekutiven je Staatsebene) konsolidieren
-elec_all_combined <- bind_rows(
-  elec_nr_sr_combined,
-  elec_kantonale_regierung_combined,
-  elec_gemeinde_exekutiven_combined)
-
 # Lookup für einheiltiche Parteinamen anwenden
-elec_all_combined <- elec_all_combined %>%
-  left_join(
-    lookup_parties_consolidated %>% select(Partei, Parteiname, party_orig_value),
-    by = "party_orig_value",
-    relationship = "many-to-many"
-  ) %>%
-  relocate(Partei, Parteiname, .after = party_orig_value)
+# elec_all_combined <- bind_rows(
+#   elec_nr_sr_combined,
+#   elec_kantonale_regierung_combined,
+#   elec_gemeinde_exekutiven_combined)
+# 
+# 
+# elec_all_combined <- elec_all_combined %>%
+#   left_join(
+#     lookup_parties_consolidated %>% select(Partei, Parteiname, party_orig_value),
+#     by = "party_orig_value",
+#     relationship = "many-to-many") %>%
+#   relocate(Partei, Parteiname, .after = party_orig_value)
+
+
+
+# Vereinheitlichte Dataframes (Exekutiven je Staatsebene) konsolidieren
+elec_all_combined <- bind_rows(elec_nr_sr_combined,
+                               elec_kantonale_regierung_combined,
+                               elec_gemeinde_exekutiven_combined) %>%
+  # Lookup für einheiltiche Parteinamen anwenden
+  left_join(lookup_parties_consolidated %>%
+              select(Partei,
+                     Parteiname,
+                     party_orig_value),
+            by = "party_orig_value",
+            relationship = "many-to-many") %>%
+  relocate(Partei,
+           Parteiname,
+           .after = party_orig_value)
+
+
+
+
 
 # # Clean-up: Nacht der Kombinierung nicht mehr benötigte "election" Tabellen löschen
 # rm(list = ls(pattern = "^elec_")[       # Objekte die mit elec_ starten aber nicht
@@ -1406,7 +1426,7 @@ elec_all_combined <- elec_all_combined %>%
 ##### Jahre eingrenzen
 
 ```{r}
-#| label: tbd
+
 
 # Jahre eingrenzen
 elec_all_combined_input <-  elec_all_combined %>% 
@@ -1416,7 +1436,7 @@ elec_all_combined_input <-  elec_all_combined %>%
 ##### Staatsebene: National- und Ständerat
 
 ```{r}
-#| label: tbd
+
 
 #################################################################################
 # Staatsebene
@@ -1437,7 +1457,7 @@ elec_nr_sr_lvl_state <- elec_all_combined_input %>%
 ##### Kantonsebene: Gewichtung nach Stimmberechtigten je Kanton für Aggregation auf Staatslevel
 
 ```{r}
-#| label: tbd
+
 
 #################################################################################
 # Kantonsebene
@@ -1487,7 +1507,7 @@ elec_kanton_lvl_state <- elec_all_combined_input %>%
 ##### Gemeindeebene: Gewichtung nach Einwohner je Gemeinde aggregiert auf Kanton und Staat
 
 ```{r}
-#| label: tbd
+
 
 # aggregiert auf Gemeindeebene
 elec_gemeinde_lvl_gemeinde  <- elec_all_combined_input %>%
@@ -1581,15 +1601,15 @@ elec_nr_sr_lvl_state
 ### Übersicht aller elec\_ dataframes
 
 ```{r}
-#| label: tbd
 
 
-elec_gemeinde_lvl_gemeinde
-elec_gemeinde_lvl_kt
-elec_gemeinde_lvl_state
-elec_kanton_lvl_kt
-elec_kanton_lvl_state
-elec_nr_sr_lvl_state
+
+view(elec_gemeinde_lvl_gemeinde)
+view(elec_gemeinde_lvl_kt)
+view(elec_gemeinde_lvl_state)
+view(elec_kanton_lvl_kt)
+view(elec_kanton_lvl_state)
+view(elec_nr_sr_lvl_state)
 
 
 parties_rating
@@ -1682,7 +1702,7 @@ for (name in df_names) {
 ### Was wenn - Parolen anwenden
 
 ```{r}
-#| label: tbd
+
 
 # year aus Datum auslesen/hinzufügen als numerischen Wert
 
@@ -1802,8 +1822,10 @@ voting_5y_party_strength_summary <- voting_5y_party_strength_weighted %>%
 
 ```
 
+#### visualisiseren
+
 ```{r}
-#| label: tbd
+
 
 # Beispiel: für das Jahr 2020
 jahr <- 2020
@@ -2095,7 +2117,7 @@ ggplot() +
 Für jede Partei den Minimalwert des Abstimmungsverhaltens zu verwenden, basiert auf der Zielsetzung, die klarste politische Position einer Partei in einem bestimmten Themenbereich zu identifizieren. Diese Methodik stellt sicher, dass auch bei wenigen Abweichungen von der Mehrheitslinie die tatsächliche Haltung der Partei deutlich erkennbar bleibt.
 
 ```{r}
-#| label: tbd
+
 
 ggplot(parties_rating,
        aes(x = eco_pct_min_x,
@@ -2144,7 +2166,7 @@ ggplot(parties_rating,
 #### Durchschnittswerte als Zentrum und Min/Max als Ellipse
 
 ```{r}
-#| label: tbd
+
 
 ggplot(parties_rating,
        aes(x = eco_pct_avg_x,
@@ -2199,7 +2221,7 @@ ggplot(parties_rating,
 #### Hauptparteien: Durchschnittswerte als Zentrum und Min/Max als Ellipse / Klein- und Regionalparteien nur mit ihrem Durchschnittswert
 
 ```{r}
-#| label: tbd
+
 
 ggplot(parties_rating,
        aes(x = eco_pct_avg_x,
@@ -2270,7 +2292,7 @@ ggplot(parties_rating,
 #### Hauptparteien: Durchschnittswerte als Zentrum und Min/Max als Ellipse / Verbände sowie Klein- und Regionalparteien nur mit ihrem Durchschnittswert
 
 ```{r}
-#| label: tbd
+
 
 ggplot(parties_rating,
        aes(x = eco_pct_avg_x,
@@ -2345,7 +2367,7 @@ ggplot(parties_rating,
 ### 3D-Koordinatensystem (Testweise)
 
 ```{r}
-#| label: tbd
+
 
 
 # Datenframe erstellen
@@ -2380,7 +2402,7 @@ fig <- fig %>% layout(
 )
 
 # Plot anzeigen
-
+fig
 
 
 ```
