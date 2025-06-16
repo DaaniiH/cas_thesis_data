@@ -1,0 +1,2258 @@
+---
+title: "cas_thesis_data_prep"
+author: "DaaniiH"
+date: 2025-06-01
+execute:
+  warning: false
+format:
+  html:
+    toc: true
+    toc-location: right
+    code-fold: true
+    code-summary: "Code anzeigen" # Optional, Text für den Aufklapp-Link
+    code-tools: true              # Optional, Toolbar für Code-Chunks
+    number-sections: true
+    max-width: none
+editor: visual
+editor_options: 
+  chunk_output_type: console
+number-sections: true
+theme: bootstrap
+---
+
+# Libraries
+
+```{r}
+#| label: load_libraries
+
+library(readr)
+library(readxl)
+library(pxmake)   # to load PX files
+library(pxR)      # to load PX files
+library(jsonlite) # to load JSON files
+
+library(purrr)
+
+library(writexl)  # Write Excel files
+
+library(dplyr)
+library(tidyr)
+library(tidyverse)
+library(ggplot2)  # Diagrams
+library(ggforce)  # Diagrams
+library(plotly)
+
+library(DT)       # datatable()
+
+library(DescTools)
+```
+
+# Functions
+
+```{r}
+#| label: load_functions
+
+
+### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###  
+# Duplikate in df finden & als $unique oder $duplicates selektionierbar machen
+find_and_remove_duplicates <- function(df) {
+  list(
+    unique = df[!duplicated(df), ],
+    duplicates = df[duplicated(df) | duplicated(df, fromLast = TRUE), ]
+  )
+}
+
+
+### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###  
+# Aktive National- & Ständeräte identifizieren und selektionierbar machen
+
+filter_active <- function(data, von, bis) {
+  von <- as.Date(von)
+  bis <- as.Date(bis)
+  data %>%
+    filter(
+      DateJoining <= bis,                      # Eintritt vor/am Ende d. Zeitraums
+      is.na(DateLeaving) | DateLeaving >= von  # Kein Austritt/nach Beginn des Z..
+    )
+}
+
+```
+
+# **ETL: Extract, Transform, Load**
+
+-   Daten werden aus verschiedenen Excel-Dateien ausgelesen, unabhängig davon, wie komplex oder verschachtelt sie sind (z. B. mehrere Sheets, verbundene Zellen, unterteilte Datenblöcke).
+
+-   Bei Excel-Dateien mit mehreren Sheets werden Functions angewendet.
+
+-   Header werden identifiziert und ggf. aus mehreren Zeilen zusammengesetzt.
+
+-   Daten werden bereinigt, normalisiert und in das gewünschte Zielformat gebracht (z. B. Wide zu Long, Entfernen von Leerzeilen, Auflösen von verbundenen Zellen, Vereinheitlichung der Spaltenstruktur).
+
+-   Die transformierten Daten werden für die weitere Analyse und Visualisation zu Verfügung gestellt.
+
+## Lookup Tabellen
+
+#### Kantone
+
+```{r}
+#| label: load_lookup_canton
+
+# Dataframe bilden für Lookup der Kantonsnamen/-Kürzel
+lookup_kantone <- data.frame(Kanton = c("Aargau", "Appenzell A. Rh.",
+                                        "Appenzell I. Rh.", "Basel-Landschaft",
+                                        "Basel-Stadt", "Bern", "Freiburg", "Genf",
+                                        "Glarus", "Graubünden", "Jura", "Luzern",
+                                        "Neuenburg", "Nidwalden", "Obwalden",
+                                        "Schaffhausen", "Schwyz", "Solothurn",
+                                        "St. Gallen", "Tessin", "Thurgau", "Uri",
+                                        "Waadt", "Wallis", "Zug", "Zürich"),
+                             Kt = c("AG", "AR", "AI", "BL", "BS","BE", "FR", "GE",
+                                    "GL", "GR", "JU", "LU", "NE","NW", "OW", "SH",
+                                    "SZ", "SO", "SG","TI", "TG", "UR", "VD", "VS",
+                                    "ZG", "ZH"),
+                             stringsAsFactors = FALSE)
+```
+
+#### Wahlberechtigte
+
+```{r}
+#| label: load_lookup_wahlberechtigte
+
+# Wahlberechtigte seit 1990
+Wahlberechtigte_1990_2024 <- read_excel("data/Wahlberechtigte_1990-2024.xlsx",
+                                        sheet = "pivot_as_value") %>% 
+  rename(year = Jahr,
+         stimmberechtigte_avg_kt = Stimmberechtigte_avg)
+```
+
+#### Parteien
+
+```{r}
+#| label: load_lookup_parties
+
+# Konsolidierte, bereinigte Lookup-Tabelle einlesen
+lookup_parties_consolidated <- read_excel("data/lookup_parties_consolidated.xlsx")
+```
+
+## Wahlen - Daten laden & Umformen
+
+### Bundesebene
+
+#### Nationalrat
+
+```{r}
+#| label: load_nationalrat
+
+# Header laden
+header <- as.character(read_excel("data/je-d-17.02.02.02.01.01_BUND_NATIONALRAT.xlsx",
+                                  skip = 0,
+                                  n_max = 1)[1, ])
+
+# Spaltennamen "Partei 1" zu "Partei" umbenennen
+header[header == "Partei 1"] <- "Partei"
+
+# Daten ab Zeile 4 (+25) mit diesem Header einlesen
+elec_nationalrat <- read_excel("data/je-d-17.02.02.02.01.01_BUND_NATIONALRAT.xlsx",
+                               skip = 3,
+                               n_max = 25,
+                               col_names = header)
+
+# Refernzen zu Fussnoten aus Parteispalte löschen
+elec_nationalrat$Partei <- sub("\\s*\\d+$",
+                                   "",
+                                   elec_nationalrat$Partei)
+```
+
+#### Ständerat
+
+```{r}
+#| label: load_ständerat
+
+# Header laden
+header <- as.character(read_excel("data/je-d-17.02.03.01_BUND_STÄNDERAT.xlsx",
+                                  skip = 0,
+                                  n_max = 1)[1, ])
+
+# Daten ab Zeile 5 (+14) mit diesem Header einlesen
+elec_ständerat <- read_excel("data/je-d-17.02.03.01_BUND_STÄNDERAT.xlsx",
+                              skip = 4,
+                              n_max = 14,
+                              col_names = header)
+
+# Refernzen zu Fussnoten aus Parteispalte löschen
+elec_ständerat$Partei <- sub("\\s*\\d+$",
+                                   "",
+                                   elec_ständerat$Partei)
+```
+
+#### National- & Ständerat kombinieren
+
+```{r}
+#| label: combine_parliament
+
+# Spaltenüberschriften anschauen (unique) & Fussnoten entfernen
+make.unique(colnames(elec_nationalrat))
+colnames(elec_nationalrat) <- gsub(" \\d+$",
+                                   "",
+                                   colnames(elec_nationalrat))
+make.unique(colnames(elec_nationalrat))
+
+
+make.unique(colnames(elec_ständerat))
+colnames(elec_ständerat) <- gsub(" \\d+$",
+                                 "",
+                                 colnames(elec_ständerat))
+make.unique(colnames(elec_ständerat))
+
+
+# df zusammenführen (Wide Format)
+elec_nr_sr_combined_wide <- bind_rows(
+  elec_nationalrat %>% mutate(role = "Nationalrat"),
+  elec_ständerat %>% mutate(role = "Ständerat")) %>%
+  select(role, everything())
+
+
+# df ins Long Format umwandeln
+elec_nr_sr_combined_long <- elec_nr_sr_combined_wide %>%
+  pivot_longer(cols = matches("^\\d{4}$"),            # Spalten mit 4 Ziffern
+               names_to = "election_year",
+               values_to = "n_seats") %>%
+  mutate(election_year = as.integer(election_year),   # Jahr als Zahl
+         n_seats = as.numeric(n_seats))               # Sitze als Zahl oder NA
+
+
+current_year <- as.integer(format(Sys.Date(), "%Y"))  # aktuelles Jahr
+
+# Zeitreihe für jede Partei/role vervollständigen und Werte fortschreiben
+elec_nr_sr_combined <- elec_nr_sr_combined_long %>%
+  rename(party_orig_value = Partei) %>%
+  group_by(role, party_orig_value) %>%
+  mutate(election_year = as.integer(election_year),   # temporär numerisch
+         year = election_year) %>% 
+  complete(year = seq(min(election_year,              # von min() 
+                          na.rm = TRUE),
+                      current_year,1),                # bis aktuelles Jahr
+           fill = list(n_seats = NA,
+                       election_year = NA)) %>%
+  arrange(role,
+          party_orig_value,
+          year) %>%
+  mutate(block = cumsum(!is.na(election_year))) %>% 
+  # Wahljahr als Block. fill() innerhalb Block, nicht über Wahlperioden hinweg.
+  group_by(role,
+           party_orig_value,
+           block) %>%
+  fill(election_year,
+       n_seats,
+       .direction = "down") %>%
+  ungroup() %>%
+  mutate(
+    election_year = as.character(election_year),      # zurück als character
+    year = as.character(year)) %>%                    # dito
+  select(-block)
+```
+
+#### Ergebnis National & Ständeratssitze
+
+```{r}
+#| label: output_parliament
+
+
+# Ratssitze pro Jahr
+elec_nr_sr_combined_sum_check <- elec_nr_sr_combined %>%
+  group_by(year, role) %>%
+  summarise(total_n_seats = sum(n_seats,
+                                na.rm = TRUE),
+    .groups = "drop") %>%
+  print(n=Inf)
+
+
+# National- und Ständratssitze pro Partei und Jahr
+elec_nr_sr_combined
+
+
+#TODO: Clean-up evt. einmal nach ganzem load.
+# Clean-up: Nicht mehr benötigte "election" Tabellen löschen
+ rm(list = ls(pattern = "^elec_")[       # Objekte die mit elec_ starten aber nicht
+   !grepl("(_combined|_combined_sum_check)$", # auf all_combined oder all_final enden
+          ls(pattern = "^elec_"))])
+```
+
+#### Parteinamen Bund (für Lookup-Tabelle)
+
+```{r}
+#| label: output_parliament_parties
+
+
+unique(elec_nr_sr_combined$party_orig_value)
+
+# Parteien zwecks Lookup/Vereinheitlichung mit bereinigten Namen in df schreiben
+lookup_input_nr_sr_parties_label  <- elec_nr_sr_combined %>%
+  select(party_orig_value) %>%
+  distinct() %>%
+  mutate(party_orig_value = toupper(party_orig_value),
+         short_name = party_orig_value,
+         short_name = if_else(short_name == "DIE MITTE",      # Umbenennen
+                              "MITTE",
+                              short_name),
+         short_name = if_else(short_name == "MCG (MCR)",      # Umbenennen
+                              "MCG",
+                              short_name),
+         short_name = gsub("\\.", "", short_name),            # . entfernen
+         long_name = NA_character_,
+         prefix = NA_character_,
+         add_info = NA,
+         level = NA_character_,
+         source = "National_und_Ständerat") %>%
+  select(party_orig_value,
+         short_name,
+         long_name,
+         prefix,
+         add_info,
+         level,
+         source) %>% print(n=Inf)
+
+# Output prüfen (unique/distinct)
+lookup_input_nr_sr_parties_label %>% distinct() %>% print(n = Inf)
+```
+
+### Kantonsebene - Kantonale Regierung (Exekutive)
+
+Die Kantonalen Abstimmungen finden nicht in allen kantonen gleichzeitg statt. Deshalb genauer die Räte/Konstellation zum Zeitpunkt der jeweiligen Abstimmung zu prüfen.
+
+Die Struktur der "schön formatierten" Exceldatei lässt keinen "simplen" Import zu.
+
+-   1 Excelsheet / Jahr
+
+-   Header ist in Zeile 2 und nicht vollständig
+
+-   Daten (für Kantone) starten in Zeile 4 aber enden auf Zeile 29 bevor es mit Kommentaren und Fussnoten weitergeht.
+
+#### Dateipfad und gewünschte Sheets definieren
+
+```{r}
+#| label: set_function_parameter_canton
+
+dateipfad <- "data/je-d-17.02.06.01_KANTON_Kantonale_Regierungswahlen.xlsx"  
+
+##DATUMSFILTER##
+selected_sheets <- c("2025","2024", "2023", "2022","2021","2020","2019")
+```
+
+#### Function laden
+
+```{r}
+#| label: load_function_canton
+
+import_election_data <- function(dateipfad, sheetname) {
+  
+  # Headerzeilen einlesen  
+  header <- readxl::read_excel(dateipfad,
+                               sheet = sheetname,
+                               skip = 1,
+                               n_max = 0) %>%
+    names()
+  
+  # Header anpassen: Wahljahr vereinheitlichen und Kanton hinzufügen
+  header[grepl("^Wahljahr", header)] <- "Wahljahr" 
+  header <- c("Kanton", header)
+        
+  # Daten ab Zeile 4 importieren
+  daten_raw <- read_excel(dateipfad,
+                          sheet = sheetname,
+                          skip = 3,
+                          col_names = header)
+  
+  # Zeilen ohne "Wahljahr" ausschliessen
+  wahljahr_col <- names(daten_raw)[grepl("^Wahljahr",
+                                         names(daten_raw))][1]
+  names(daten_raw)[names(daten_raw) == wahljahr_col] <- "Wahljahr"
+
+  daten_wide <- daten_raw %>%
+    filter(!is.na(suppressWarnings(as.numeric(.data[[wahljahr_col]]))))
+  
+  # Zu pivotierenden Spalten in numeric umwandeln
+  cols_pivot <- setdiff(names(daten_wide),
+                        c("Kanton", wahljahr_col))
+  daten_wide <- daten_wide %>%
+    mutate(across(all_of(cols_pivot),
+                  as.numeric))
+    
+  # Pivotieren
+  daten_long <- daten_wide %>%
+    pivot_longer(
+      cols = all_of(cols_pivot),
+      names_to = "Partei",
+      values_to = "Wert")
+  
+  return(daten_long)
+}
+```
+
+#### Function ausführen & Konsolidation aus Datenliste
+
+```{r}
+#| label: run_function_canton
+
+# Objekt erstellen, mit Sheets als tibble/dataframe
+daten_liste <- setNames(lapply(selected_sheets,
+                               function(sheet) import_election_data (dateipfad,
+                                                                     sheet)),
+                        selected_sheets)
+
+str(daten_liste)
+
+# Alle tibbles zu einem Dataframe zusammenfügen
+elec_canton_combined <- bind_rows(daten_liste,
+                                               .id = "year") %>%
+  rename(election_year = Wahljahr,
+         party_orig_value = Partei,
+         n_seats = Wert) %>%
+  mutate(role = "Kantonsregierung",
+         election_year = as.character(election_year)) %>% 
+  filter(party_orig_value != "Total") %>%
+  left_join(lookup_kantone, by = "Kanton") %>%
+  select(role,
+         party_orig_value,
+         year,
+         election_year,
+         n_seats,
+         Kt,
+         Kanton,
+         everything())
+```
+
+#### Ergebnis Kantonsregierung
+
+```{r}
+#| label: output_canton
+
+
+# Ratssitze pro Jahr (nach-)prüfen
+elec_canton_combined_sum_check <- elec_canton_combined %>%
+  group_by(year, role) %>%
+  summarise(total_n_seats = sum(n_seats,
+                                na.rm = TRUE),
+    .groups = "drop") %>%
+  print(n=Inf)
+
+
+# National- und Ständratssitze pro Partei und Jahr
+elec_canton_combined
+
+
+#TODO: Clean-up evt. einmal nach ganzem load.
+# Clean-up: Nicht mehr benötigte "election" Tabellen löschen
+ rm(list = ls(pattern = "^elec_")[       # Objekte die mit elec_ starten aber nicht
+   !grepl("(_combined|_combined_sum_check)$", # auf all_combined oder all_final enden
+          ls(pattern = "^elec_"))])
+ 
+
+# datatable(elec_kantonale_regierung_combined,
+#           class = 'nowrap',
+#           filter = 'top',
+#           options = list(pageLength = 7,
+#                          scrollX = TRUE,
+#                          search = list(regex = TRUE,
+#                                        caseInsensitive = TRUE)))
+```
+
+#### Parteinamen Kanton (für Lookup-Tabelle)
+
+```{r}
+
+#| label: output_canton_parties
+
+# Parteinamenvarianten
+unique(elec_canton_combined$party_orig_value)
+
+# Parteien zwecks Lookup/Vereinheitlichung mit bereinigten Namen in df schreiben
+lookup_input_canton_parties_label <- elec_canton_combined %>%
+  mutate(level = NA_character_,
+         long_name = NA_character_,
+         source = "Kantonale_Regierung",
+         
+         add_info = str_extract(party_orig_value,
+                                "\\d+(?=\\)?$)"),  # Zahl am Ende/vor Klammer-Ende
+         short_name = str_remove(party_orig_value,
+                                 "\\s*\\d+\\)?$"), # - Leerzeichen/Zahl/Klammer
+         prefix = NA_character_) %>%
+  select(party_orig_value,
+         short_name,
+         long_name,
+         prefix,
+         add_info,
+         level,
+         source) %>%
+  # Großschreibung der short_name-Spalte
+  mutate(short_name = toupper(short_name)) 
+ 
+# Output prüfen (unique/distinct)
+lookup_input_canton_parties_label %>% distinct() %>% print(n = Inf)
+```
+
+### Gemeindeebene - Exekutiven der statistischen Städte
+
+-   1 Excelsheet / Jahr
+
+-   Header zweizeilig mit Start in Zeile –\> 3 `skip = 2, n_max = 2,`
+
+-   Teils verbundene Header-Zeilen (vertikal/horizontal)
+
+-   Cluster Einwohnerzahlen unterteilt Daten
+
+-   Parteinamen uneinheitlich aufgrund von Fussnoten
+
+--\> Datenformat "wide" zuerst bereinigen und ins "long" Format bringen
+
+#### Dateipfad und gewünschte Sheets festlegen
+
+```{r}
+#| label: set_function_parameter_gemeinde
+
+dateipfad <- "data/je-d-17.02.07.01_GEMEINDE_Die Exekutiven der statistischen Städte.xlsx"
+
+##DATUMSFILTER##
+selected_sheets <- c("2024", "2023", "2022","2021","2020","2019") 
+```
+
+#### Function für den Import der Gemeindedaten
+
+```{r}
+#| label: load_function_Gemeinde
+
+importiere_sheet <- function(dateipfad, sheetname) {
+
+      ########## HEADER ##########################################
+      ########## Auslesen/Zusammensetzen ################################
+    
+        # Headerzeilen einlesen
+      header <- suppressMessages(read_excel(dateipfad,
+                   sheet = sheetname,
+                   skip = 2,
+                   n_max = 2,
+                   col_names = FALSE))
+      
+      # Daten  einlesen
+      daten_raw <- suppressMessages(read_excel(dateipfad,
+                              sheet = sheetname,
+                              skip = 5,
+                              col_names = FALSE))
+      
+      # Spaltennamen zusammensetzen
+      # Leere Zellen in 1. Headerzeile mit Werten von rechts auffüllen wenn leer/NA
+      header_filled <- as.data.frame(t(header))   # t() "matrix transpose"
+      header_filled <- fill(header_filled,        
+                            V1,                   # Header Spalte 1 (V1) auffüllen
+                            .direction = "down")  # Werte nach unten übernehmen
+      header_filled <- t(header_filled)           # t() nochmals (zurück)
+      
+      # Spaltennamen kombinieren
+      spaltennamen <- paste(header_filled[1, ],
+                            header_filled[2, ],
+                            sep = "_")
+      spaltennamen <- gsub("_NA|NA_","", spaltennamen) # Entfernt überflüssige NAs
+      
+      # Spaltennamen zuweisen
+      colnames(daten_raw) <- spaltennamen
+      
+      
+      ########## TRANSPONIEREN ##########################################
+      ########## Gemeindegrössen Cluster ################################
+    
+      # Cluster Einwohnerzahl als Spalte verwenden
+      daten_wide <- daten_raw %>%
+        mutate(Gemeindegrösse_Cluster =             # Name der neuen Spalte
+                 ifelse(
+                   is.na(                           # 4) auf NA prüfen
+                     suppressWarnings(        # 3) Warnung aus (z.B. "≥ ..Einw..")
+                     as.numeric(                    # 2) Wert als Zahl 
+                     gsub("'", "", `Kantons-Nr.`)   # 1) Tausender Zeichen (')                                                              entfernen
+                   ))),
+                   as.character(`Kantons-Nr.`),     # 5) Wert von "Kantons-Nr" 
+                   NA_character_                    #    sonst NA   
+                 ))  %>%
+        fill(Gemeindegrösse_Cluster,
+             .direction = "down") %>%              # Cluster nach unten auffüllen
+        filter(!is.na(suppressWarnings(
+          as.numeric(gsub("'", "", `Kantons-Nr.`))))) # Herausfiltern von Zeilen                                                           mit NICHT-numerischem Wert
+    
+    
+    # Ansicht (Snapshot) nach transponieren
+    daten_wide[1:10,                    # 10 Zeilen
+               c(1:10,                  # 10 Spalten +
+                 ncol(daten_wide))]     # Letzte Spalte
+                                        # ncol() von df daten_wide --> Anz. Spalten
+                                        # Anzahl Spalten = Position letzte Spalte
+    
+    
+    ########## TRANSPONIEREN ##########################################
+    ########## Frauen, Männer, Total & Parteien ## ####################
+    
+    daten_long <- daten_wide %>%
+      mutate(across(matches("(_Frauen|_Männer|_Total)$"),
+                    ~ suppressWarnings(as.numeric(.)))) %>%       # Werte numerisch
+      pivot_longer(cols = matches("(_Frauen|_Männer|_Total)$"),   # Spaltenauswahl
+                   names_to = c("party_orig_value", "m_w_Total"),  # Label-Spalte
+                   names_pattern = "^(.*)_(Frauen|Männer|Total)$",# RegEx
+                   values_to = "Wert")                            # Wert-Spalte
+    
+    return(daten_long)
+}
+```
+
+#### Import der Dateien testen (optional)
+
+```{r}
+#| label: run_test_function_Gemeinde
+
+
+for (sheet in selected_sheets) {
+  cat("\n-----------------------------\n")
+  cat("Versuche Sheet:", sheet, "\n")
+  result <- tryCatch({
+    dat <- importiere_sheet(dateipfad, sheet)
+    cat("Sheet erfolgreich eingelesen:", sheet, "\n")
+    # Zusammenfassung:
+    cat("Anzahl Zeilen:", nrow(dat), "\n")
+    cat("Anzahl Spalten:", ncol(dat), "\n")
+    cat("Spaltennamen (erste 15):", paste(names(dat)[1:min(15, ncol(dat))], collapse = ", "), "\n")
+    TRUE
+  }, error = function(e) {
+    cat("Fehler beim Einlesen von Sheet:", sheet, "\n")
+    cat("Fehlermeldung:", e$message, "\n")
+    FALSE
+  })
+}
+```
+
+#### Function ausführen & Konsolidation aus Datenliste
+
+```{r}
+#| label: run_function_Gemeinde
+
+# Objekt erstellen, mit Sheets als tibble/dataframe
+daten_liste <- setNames(lapply(selected_sheets,
+                               function(sheet) importiere_sheet(dateipfad, sheet)),
+                        selected_sheets)
+
+str(daten_liste)
+# lapply(daten_liste, summary)
+
+# Alle tibbles zu einem Dataframe zusammenfügen
+elec_gemeinde_combined <- bind_rows(daten_liste,
+                                            .id = "year") %>% 
+  filter(m_w_Total == "Total",
+         party_orig_value != "Total") %>% 
+  rename(election_year = Wahljahr,
+         n_seats = Wert,
+         Kt = Kanton) %>% 
+  mutate(role = "Gemeindeexekutive",
+         election_year = as.character(election_year)) %>%
+  select(-c('Grössenklasse-Nr.',
+            Grössenklasse,
+            `Kantons-Nr.`,
+            m_w_Total)) %>%
+  left_join(lookup_kantone, by = "Kt") %>%
+  select(role,
+         party_orig_value,
+         year,
+         election_year,
+         n_seats,
+         Kt,
+         Kanton,
+         everything())
+
+
+#  year in integer umwandeln
+elec_gemeinde_combined$year <- as.integer(as.character(elec_gemeinde_combined$year))
+
+# Fehlende Jahre ergänzen
+current_year <- as.integer(format(Sys.Date(), "%Y"))
+max_year <- max(elec_gemeinde_combined$year, na.rm = TRUE)
+
+if (max_year < current_year) {
+  # Für jedes fehlende Jahr
+  for (y in (max_year+1):current_year) {
+    # Letzte Werte kopieren und Jahr anpassen
+    last_year_data <- elec_gemeinde_combined %>% filter(year == max_year)
+    last_year_data$year <- y
+    last_year_data$election_year <- as.character(y)
+    elec_gemeinde_combined <- bind_rows(elec_gemeinde_combined, last_year_data)
+  }
+}
+```
+
+#### Ergebnis Gemeinde bzw. Exekutiven statistischer Städte
+
+```{r}
+#| label: output_gemeinde
+
+# Ratssitze pro Jahr (nach-)prüfen
+elec_gemeinde_combined_sum_check <- elec_gemeinde_combined %>%
+  group_by(year) %>%                         # Gruppieren nach Jahr
+  summarise(summe = sum(n_seats, na.rm = TRUE)) # Summe berechnen, NAs ignorieren
+
+
+
+#TODO: Clean-up evt. einmal nach ganzem load.
+# Clean-up: Nicht mehr benötigte "election" Tabellen löschen
+ rm(list = ls(pattern = "^elec_")[       # Objekte die mit elec_ starten aber nicht
+   !grepl("(_combined|_combined_sum_check)$", # auf all_combined oder all_final enden
+          ls(pattern = "^elec_"))])
+
+
+
+# TODO Grosses Datatable, deshalb auskommentieren oder ander Lösung..
+# datatable(elec_gemeinde_exekutiven_combined,
+#           class = 'nowrap',
+#           filter = 'top',
+#           options = list(pageLength = 7,
+#                          scrollX = TRUE,
+#                          search = list(regex = TRUE,
+#                                        caseInsensitive = TRUE)))
+
+
+```
+
+#### Parteinamen Gemeinde (für Lookup-Tabelle)
+
+```{r}
+#| label: output_gemeinde_parties
+
+
+# Parteinamenvarianten
+unique(elec_gemeinde_combined$party_orig_value)
+
+# Parteien zwecks Lookup/Vereinheitlichung mit bereinigten Namen in df schreiben
+lookup_input_gemeinde_parties_label <- elec_gemeinde_combined %>%
+  mutate(add_info = str_extract(party_orig_value,
+                                "\\d+(?=\\)?$)"),  # Zahl am Ende/vor Klammer-Ende
+         short_name = str_remove(party_orig_value,
+                                 "\\s*\\d+\\)?$"), # - Leerzeichen/Zahl/Klammer
+         long_name = NA_character_, 
+         prefix = NA_character_,
+         level = NA_character_,
+         source = "Gemeinde_Exekutiven") %>% 
+  # Großschreibung der short_name-Spalte
+  mutate(short_name = toupper(short_name))%>% 
+  select(party_orig_value,
+         short_name,
+         long_name,
+         prefix,
+         add_info,
+         level,
+         source)
+  
+# Output prüfen (unique/distinct)
+lookup_input_gemeinde_parties_label %>% distinct() %>% print(n = Inf)
+```
+
+### Listen aller Staatsebenen konsolidieren & einheitliche Parteinamen joinen
+
+```{r}
+#| label: consolidation_parties_from_elec
+
+
+# In allen Dataframes die year-Spalte vereinheitlichen
+elec_nr_sr_combined$year <- as.integer(as.character(elec_nr_sr_combined$year))
+elec_canton_combined$year <- as.integer(as.character(elec_canton_combined$year))
+elec_gemeinde_combined$year <- as.integer(as.character(elec_gemeinde_combined$year))
+
+
+# Vereinheitlichte Dataframes (Exekutiven je Staatsebene) konsolidieren
+elec_all_combined <- bind_rows(elec_nr_sr_combined,
+                               elec_canton_combined,
+                               elec_gemeinde_combined) %>%
+  # Lookup für einheiltiche Parteinamen anwenden
+  left_join(lookup_parties_consolidated %>%
+              select(Partei,
+                     Parteiname,
+                     party_orig_value),
+            by = "party_orig_value",
+            relationship = "many-to-many") %>%
+  relocate(Partei,
+           Parteiname,
+           .after = party_orig_value)
+```
+
+### Clean-up "Election": Obsolete Objekte (nach Konsolidierung) löschen
+
+```{r}
+#| label: clean_up_election_df
+
+# Clean-up entfernt Objekte die mit "elec_" starten, ausser bei Endung auf
+# "_all_combined" oder "_all_final"
+ rm(list = ls(pattern = "^elec_")[       # Objekte die mit elec_ starten aber nicht
+   !grepl("(_all_combined|_all_final)$", # auf all_combined oder all_final enden
+          ls(pattern = "^elec_"))])
+```
+
+### Parteistärken berechnen - Sitze aggregiert auf Staatsebene
+
+#### Jahre eingrenzen
+
+```{r}
+#| label: filter_years_in_office
+
+##DATUMSFILTER##
+# Jahre eingrenzen
+elec_all_combined_input <-  elec_all_combined %>% 
+  filter(year >= "2019")
+```
+
+#### Dataframes verinhetlichen und ggfs. aggregieren
+
+##### Staatsebene: National- und Ständerat "as is"
+
+```{r}
+#| label: yio_state
+
+elec_nr_sr_lvl_state <- elec_all_combined_input %>%
+  filter(role %in% c("Ständerat",
+                     "Nationalrat")) %>%
+  group_by(year,
+           Partei) %>%
+  summarise(n_seats_sum = sum(n_seats,
+                              na.rm = TRUE),
+            .groups = "drop") %>%
+  group_by(year) %>%
+  mutate(n_seats_pct = 100 * n_seats_sum / sum(n_seats_sum, na.rm = TRUE)) %>%
+  ungroup() %>%
+  filter(n_seats_sum > 0)
+```
+
+##### Kantonsebene: Gewichtung nach Stimmberechtigten je Kanton für Aggregation auf Staatsebene
+
+```{r}
+#| label: yio_canton
+
+# aggregiert auf Kantonsebene
+elec_kanton_lvl_kt <- elec_all_combined_input %>%
+  filter(role == "Kantonsregierung") %>%
+  group_by(year,
+           Kt,
+           Partei) %>%
+  summarise(n_seats_sum = sum(n_seats,
+                              na.rm = TRUE),
+            .groups = "drop") %>%
+  group_by(year,
+           Kt) %>%
+  mutate(n_seats_pct = 100 * n_seats_sum / sum(n_seats_sum,
+                                               na.rm = TRUE)) %>%
+  ungroup()
+
+
+# integer vs. character --> anpassen
+Wahlberechtigte_1990_2024 <- Wahlberechtigte_1990_2024 %>%
+  mutate(year = as.integer(as.character(year)))
+
+# aggregiert auf Staatsebene
+elec_kanton_lvl_state <- elec_all_combined_input %>%
+  filter(role == "Kantonsregierung") %>%
+  left_join(Wahlberechtigte_1990_2024 %>%
+              group_by(year) %>% 
+              summarise(stimmberechtigte_avg_state = sum(stimmberechtigte_avg_kt,
+                                                         na.rm = TRUE)),
+    by = "year") %>%
+  mutate(n_seats_weighted = n_seats * stimmberechtigte_avg_state) %>%
+  group_by(year,
+           Partei) %>%
+  summarise(n_seats_sum = sum(n_seats,
+                              na.rm = TRUE),
+            n_seats_sum_weighted = sum(n_seats_weighted,
+                                       na.rm = TRUE),
+            stimmberechtigte_avg_state = first(stimmberechtigte_avg_state),
+            .groups = "drop") %>%
+  group_by(year) %>%
+  mutate(n_seats_pct =
+           100 * n_seats_sum / sum(n_seats_sum,
+                                   na.rm = TRUE),
+         n_seats_pct_weighted =
+           100 * n_seats_sum_weighted / sum(n_seats_sum_weighted,
+                                            na.rm = TRUE)) %>%
+  ungroup()
+```
+
+##### Gemeindeebene: Gewichtung nach Einwohner je "statistische Stadt" aggregiert auf Kanton- und Staatsebene
+
+```{r}
+#| label: yio_gemeinde
+
+# aggregiert auf Gemeindeebene
+elec_gemeinde_lvl_gemeinde  <- elec_all_combined_input %>%
+  filter(role == "Gemeindeexekutive",
+         n_seats != 0) %>%
+  group_by(year,
+           Gemeinde,
+           Partei) %>%
+  summarise(n_seats_sum = sum(n_seats,
+                              na.rm = TRUE),
+            .groups = "drop") %>%
+  group_by(year,
+           Gemeinde) %>%
+  mutate(n_seats_pct = 100* n_seats_sum / sum(n_seats_sum,
+                                         na.rm = TRUE)) %>%
+  ungroup()
+
+# aggregiert auf Kantonsebene
+elec_gemeinde_lvl_kt <- elec_all_combined_input %>%
+  filter(role == "Gemeindeexekutive",
+         n_seats != 0) %>%
+  group_by(year,
+           Kt,
+           Gemeinde,
+           Partei) %>%
+  summarise(n_seats_sum = sum(n_seats, na.rm = TRUE),
+            Einwohner = first(Einwohner),
+            .groups = "drop") %>%
+  mutate(weighted_seats = n_seats_sum * Einwohner) %>%
+  group_by(year,
+           Kt,
+           Partei) %>%
+  summarise(n_seats_sum = sum(n_seats_sum,                  # ungewichtete Sitze
+                              na.rm = TRUE),
+            n_seats_sum_weighted = sum(weighted_seats,      # gewichtete Sitze
+                                     na.rm = TRUE), 
+            .groups = "drop") %>%
+  group_by(year,
+           Kt) %>%
+  mutate(n_seats_pct = 100 *                                # ungewichtet %
+           n_seats_sum / sum(n_seats_sum,
+                             na.rm = TRUE),
+         n_seats_pct_weighted = 100 *                       # gewichtet %  
+           n_seats_sum_weighted / sum(n_seats_sum_weighted,
+                                    na.rm = TRUE)) %>%
+  ungroup()
+
+# aggregiert auf Staatsebene 
+elec_gemeinde_lvl_state <- elec_all_combined_input %>%
+  filter(role == "Gemeindeexekutive",
+         n_seats != 0) %>%
+  group_by(year,
+           Gemeinde,
+           Partei) %>%
+  summarise(n_seats_sum = sum(n_seats,
+                              na.rm = TRUE),
+            Einwohner = first(Einwohner),
+            .groups = "drop") %>%
+  mutate(weighted_seats = n_seats_sum * Einwohner) %>%
+  group_by(year,
+           Partei) %>%
+  summarise(n_seats_sum = sum(n_seats_sum,                   # ungewichtete Sitze
+                              na.rm = TRUE),
+            n_seats_sum_weighted = sum(weighted_seats,       # gewichtete Sitze
+                                       na.rm = TRUE),
+            .groups = "drop") %>%
+  group_by(year) %>%
+  mutate(n_seats_pct = 100 *
+           n_seats_sum / sum(n_seats_sum,
+                             na.rm = TRUE),                  # ungewichtet %
+         n_seats_pct_weighted = 100 *
+           n_seats_sum_weighted / sum(n_seats_sum_weighted,
+                                      na.rm = TRUE)) %>%     # gewichtet %
+  ungroup()
+```
+
+### Übersicht aller elec\_ dataframes
+
+#### Function für df() Übersicht
+
+```{r}
+#| label: load_function_overview
+
+df_overview <- function(df_name) {
+  df <- get(df_name)
+  cat("====", df_name, "====\n")
+  cat("Anzahl Zeilen:", nrow(df), "\n")
+  cat("Anzahl Spalten:", ncol(df), "\n")
+  cat("Spaltennamen:\n")
+
+  print(names(df))
+  
+  # Dynamische Sortierung: Nur vorhandene Spalten werden verwendet
+  sort_cols <- c()
+  sort_orders <- c()
+  
+  # 1) Nach year (aufsteigend)
+  if ("year" %in% names(df)) {
+    df$year <- as.numeric(df$year)
+    sort_cols <- c(sort_cols, "year")
+    sort_orders <- c(sort_orders, TRUE) # TRUE = aufsteigend
+  }
+  # 2) Nach Gemeinde (alphabetisch)
+  if ("Gemeinde" %in% names(df)) {
+    sort_cols <- c(sort_cols, "Gemeinde")
+    sort_orders <- c(sort_orders, TRUE)
+  }
+  # 3) Kt (alphabetisch)
+  if ("Kt" %in% names(df)) {
+    sort_cols <- c(sort_cols, "Kt")
+    sort_orders <- c(sort_orders, TRUE)
+  }
+  # 4) n_seats_sum (absteigend)
+  if ("n_seats_sum" %in% names(df)) {
+    df$n_seats_sum <- as.numeric(df$n_seats_sum)
+    sort_cols <- c(sort_cols, "n_seats_sum")
+    sort_orders <- c(sort_orders, FALSE) # FALSE = absteigend
+  }
+  
+  # Sortiere Dataframe, falls mindestens eine Sortierspalte vorhanden ist
+  if (length(sort_cols) > 0) {
+    # Erzeuge eine Liste von Spalten für do.call(order, ...)
+    order_args <- lapply(seq_along(sort_cols), function(i) {
+      col <- df[[sort_cols[i]]]
+      if (!sort_orders[i]) -col else col
+    })
+    df <- df[do.call(order, order_args), ]
+  }
+  
+  # Prüfung auf gültige Zahlen in n_seats_sum
+  if ("n_seats_sum" %in% names(df)) {
+    valid_rows <- !is.na(df$n_seats_sum) & is.finite(as.numeric(df$n_seats_sum))
+    if (any(!valid_rows)) {
+      last_valid_row <- which(!valid_rows)[1] - 1
+    } else {
+      last_valid_row <- nrow(df)
+    }
+    rows_to_show <- 1:max(1, last_valid_row)
+    cat("Zeilen mit Zahlen in 'n_seats_sum' (sortiert):\n")
+    print(df[rows_to_show, , drop = FALSE])
+  } else {
+    cat("Erste 3 Zeilen:\n")
+    print(head(df, 3))
+  }
+  cat("\n\n")
+}
+```
+
+#### df für Übersicht definieren und Function ausführen
+
+```{r}
+#| label: run_funcion_overview
+
+# Liste der Dataframes
+df_names <- c("elec_gemeinde_lvl_gemeinde",
+              "elec_gemeinde_lvl_kt",
+              "elec_gemeinde_lvl_state",
+              "elec_kanton_lvl_kt",
+              "elec_kanton_lvl_state",
+              "elec_nr_sr_lvl_state")
+
+
+# Übersicht für alle Dataframes erstellen
+for (name in df_names) {
+  df_overview(name)
+}
+```
+
+### Entwicklung über die Jahre?!
+
+## Abstimmungen - Daten laden & Umformen
+
+```{r}
+
+#TODO: Wofür?
+ 
+
+# Manuell migrierte Lookup Tabellen aus dem PDF-Codebook (swissvotes.ch) laden
+# Parteien
+lookups_codebook_parties <- read_excel("data/lookup_codebook.xlsx",
+                                       sheet = "parties")
+# Parteiparolen
+lookups_codebook_paroles <- read_excel("data/lookup_codebook.xlsx",
+                                       sheet = "paroles")
+
+```
+
+### Swissvotes-Datensatz mit Abstimmungsdetails laden
+
+```{r}
+#| label: load_voting
+
+
+# Ergbenisse der Schweizweite Abstimmungen laden
+voting_raw <- read_delim("data/abstimmungen_swissvotes_DATASET CSV 09-02-2025.csv",
+                     delim = ";",
+                     escape_double = FALSE,
+                     trim_ws = TRUE,
+                     show_col_types = FALSE)
+
+# Datum formatieren
+voting_raw <- voting_raw %>% 
+  mutate(datum = dmy(datum))
+
+##DATUMSFILTER##
+# Einträge vor 2019 exkludieren
+voting_raw_5y <- voting_raw %>%
+  filter(datum >= as.Date("2019-01-01"))
+
+
+# #TODO: Löschen, nicht benötigt?!
+# # Abstimmungsdaten der letzten 5 Jahre in Vektor schreiben für spätere Selektion
+# voting_5y_dates <- voting_5y %>%
+#   select(datum) %>%
+#   distinct() %>%
+#   pull(datum) %>%
+#   as.character()
+
+# Abstimmungen als datatable() anzeigen
+# datatable(voting_5y,
+#           class = 'nowrap',
+#           filter = 'top',
+#           options = list(pageLength = 7,
+#                          scrollX = TRUE,
+#                          search = list(regex = TRUE,
+#                                        caseInsensitive = TRUE)))
+
+
+
+```
+
+```{r}
+#| label: identify_voting_party_headers
+
+# Parteien aus Parolen-Spalten (p- & pdev-..-..) identifizieren
+lookup_input_party_label_vote <- bind_rows(
+  # Block 1: Staatsebene - Mutterparteien, Verbände & weitere Organisationen
+  tibble(party_orig_value = grep("^p-",
+                               names(voting_5y),
+                               value = TRUE)) %>%
+    mutate(level = "state") %>%
+    separate(
+      party_orig_value,
+      into = c("prefix", "short_name", "add_info"),
+      sep = "[-_]",
+      remove = FALSE,
+      extra = "merge",
+      fill = "right"),
+  # Block 2: Kantonsebene - Jungparteien, Frauensektionen, etc.
+  tibble(party_orig_value = grep("^pdev-",
+                               names(voting_5y),
+                               value = TRUE)) %>%
+    mutate(level = "canton_fraction") %>%
+    separate(
+      party_orig_value,
+      into = c("prefix", "short_name", "add_info"),
+      sep = "[-_]",
+      remove = FALSE,
+      extra = "merge",
+      fill = "right")) %>%
+  # Großschreibung der short_name-Spalte
+  mutate(short_name = toupper(short_name),
+         long_name = NA_character_,
+         source = "Abstimmungen") %>% 
+  select(party_orig_value,
+         short_name,
+         long_name,
+         prefix,
+         add_info,
+         level,
+         source)
+```
+
+### Parteinamen Inputs konsolidieren & auf Vollständigkeit prüfen
+
+```{r}
+#| label: consolidation_parties_from_elec
+
+# Parteilabel-Varaianten aus den Input Files (Wahlen & Abstimmungen) konsolidieren
+lookup_input_party_label_combined <- bind_rows(
+  lookup_input_canton_parties_label,
+  lookup_input_gemeinde_parties_label,
+  lookup_input_nr_sr_parties_label,
+  lookup_input_party_label_vote) %>%
+  distinct()
+
+
+# Abgleich der Parteinamen mit Lookup-Master
+# Fehlende Werte mittels Anti-Join in separatem Dataframe speichern
+lookup_input_party_label_missing_in_master <- lookup_input_party_label_combined %>%
+  anti_join(
+    lookup_parties_consolidated %>% select(party_orig_value),
+    by = "party_orig_value")
+
+# Ergebnis anzeigen
+if (nrow(lookup_input_party_label_missing_in_master) > 0) {
+  print(lookup_input_party_label_missing_in_master)
+} else {
+  message("Partei Lookup Master ist vollständig")
+}
+```
+
+### Clean-up "lookup": Obsolete Objekte (nach konsolidierung) löschen
+
+```{r}
+#| label: clean_up_lookup_df
+
+# Clean-up: Nicht mehr benötigte "lookup" Tabellen löschen
+ rm(list = ls(pattern = "^lookup_input")[       # mit lookup_input starten aber
+   !grepl("(_combined|_master)$",   # nicht mit _combined / all_final enden
+          ls(pattern = "^lookup_input"))])
+```
+
+## Abstimmungsergebnisse transformieren & ergänzen
+
+### Transformation: Vom Wide ins Long Format
+
+#### Präfix-Spalten: "p-" / "pdev-" & "-pos" inkl. Parolencluster transformieren
+
+```{r}
+#| label: wide_to_long_prefix_columns
+
+# Spaltennamen extrahieren, die ins Long Format sollen
+sel_cols <- names(voting_raw_5y)[
+  grepl("^p-|^pdev-|(-pos)",
+        names(voting_raw_5y))
+]
+
+# Spalteninhalte als Charakter definieren
+voting_raw_5y[sel_cols] <- lapply(voting_raw_5y[sel_cols],
+                                             as.character)
+
+# Wide in Long Format
+tmp_voting_long <- voting_raw_5y %>%  pivot_longer(cols = all_of(sel_cols),
+                                               names_to = "variable",
+                                               values_to = "value")
+
+# Table: Lookup für p- und pdev-
+lookup_parole <- read.table(text = '1\tparole_Ja
+                                    2\tparole_Nein
+                                    3\tparole_keine
+                                    4\tparole_Enthalten
+                                    5\tparole_keine
+                                    8\tparole_Gegenentwurf (Stichfrage))
+                                    9\tparole_Volksinitiative (Stichfrage)
+                                    66\tparole_keine
+                                    .\tparole_keine
+                                    9999\tparole_keine
+                                    \tparole_keine',
+                            sep = "\t",
+                            col.names = c("wert",
+                                          "label"),
+                            stringsAsFactors = FALSE,
+                            fill = TRUE,
+                            quote = "")
+
+# Table: Lookup für -pos
+lookup_pos <- read.table(text = '.\tpos_Missing
+                                  1\tpos_Befürwortend
+                                  2\tpos_Ablehnend
+                                  3\tpos_Keine
+                                  8\tpos_Vorzug Gegenentwurf (bei Stichfragen)
+                                  9\tpos_Vorzug Volksinitiative (bei Stichfragen)',
+                         sep = "\t",
+                         col.names = c("wert",
+                                       "label"),
+                         stringsAsFactors = FALSE,
+                         fill = TRUE,
+                         quote = "")
+lookup_pos$wert <- as.character(trimws(lookup_pos$wert))
+
+
+# Lookup anwenden (Join)
+# value als Character
+lookup_parole$wert <- as.character(trimws(lookup_parole$wert))
+lookup_pos$wert <- as.character(trimws(lookup_pos$wert))
+voting_long$value <- as.character(trimws(voting_long$value))
+
+# Join je nach variable-Typ
+tmp_voting_long <- tmp_voting_long %>%
+  mutate(value = trimws(value))  %>%
+  mutate(lookup_type = case_when(grepl("^p-|^pdev-",
+                                       variable) ~ "parole",
+                                 grepl("-pos",
+                                       variable) ~ "pos",
+                                 TRUE ~ NA_character_)) %>%
+  left_join(lookup_parole %>%
+              rename(label_parole = label),
+            by = c("value" = "wert"),
+            na_matches = "never") %>%
+  left_join(lookup_pos %>%
+              rename(label_pos = label),
+            by = c("value" = "wert"),
+            na_matches = "never") %>%
+  mutate(label = case_when(lookup_type == "parole" ~ label_parole,
+                           lookup_type == "pos" ~ label_pos,
+                           TRUE ~ NA_character_)) %>%
+  select(-label_parole,
+         -label_pos,
+         -lookup_type)
+
+
+# NA korrigeren
+tmp_voting_long <- tmp_voting_long %>%
+  mutate(label = case_when(
+    is.na(label) & grepl("^p-|^pdev-", variable) ~ "parole_keine",
+    is.na(label) & grepl("-pos", variable)       ~ "pos_keine",
+    TRUE                                         ~ label))
+
+# One-Hot-Encoding (Dummy-Codierung)
+tmp_voting_long$dummy <- 1L
+
+# Pivotieren: Jede label-Ausprägung wird eigene Spalte, 1 falls zutreffend, sonst 0
+tmp_voting_wide <- tmp_voting_long %>%
+  pivot_wider(
+    id_cols = setdiff(names(voting_long), c("value", "label", "dummy")),
+    names_from = label,
+    values_from = dummy,
+    values_fill = 0)
+
+voting_5y_long <- tmp_voting_wide
+```
+
+#### Parteinamen ergänzen
+
+```{r}
+#| label: add_party_names
+
+tmp_voting_5y_long <- voting_5y_long %>%
+  left_join(lookup_parties_consolidated %>% select(party_orig_value,
+                                                   Partei),
+            by = c("variable" = "party_orig_value")) %>% 
+   relocate(Partei, .after = variable)
+
+voting_5y_long <- tmp_voting_5y_long
+rm(tmp_voting_5y_long)
+```
+
+#### Parteistärken ergänzen
+
+```{r}
+#| label: add_party_strength
+
+# "year" in Quellen as.numeric() definieren
+elec_nr_sr_lvl_state <- elec_nr_sr_lvl_state %>%
+  mutate(year = as.numeric(year))
+elec_kanton_lvl_state <- elec_kanton_lvl_state %>%
+  mutate(year = as.numeric(year))
+elec_gemeinde_lvl_state <- elec_gemeinde_lvl_state %>%
+  mutate(year = as.numeric(year))
+
+
+# Parteistärken (Staatsebende) dazu laden
+voting_5y_long_strength <- voting_5y_long %>%
+  filter(!grepl("^pdev-", variable)) %>%      # pdev- vorläufig ausschliessen
+  mutate(year = as.numeric(year(datum))) %>% 
+  #National- und Ständerat
+  left_join(elec_nr_sr_lvl_state %>% select(year,
+                                            Partei,
+                                            n_seats_sum,
+                                            n_seats_pct) %>%
+              rename(n_seats_state = n_seats_sum,
+                     n_seats_pct_state = n_seats_pct),
+            by = c("year",
+                   "Partei")) %>%
+  #Kanton
+  left_join(elec_kanton_lvl_state %>% select(year,
+                                            Partei,
+                                            n_seats_sum,
+                                            n_seats_pct,
+                                            n_seats_sum_weighted,
+                                            n_seats_pct_weighted) %>%
+              rename(n_seats_kanton = n_seats_sum,
+                     n_seats_pct_kanton = n_seats_pct,
+                     n_seats_sum_weighted_kt = n_seats_sum_weighted,
+                     n_seats_pct_weighted_kt = n_seats_pct_weighted),
+        by = c("year", "Partei")) %>%
+  #Gemeinde
+  left_join(elec_gemeinde_lvl_state %>% select(year,
+                                               Partei,
+                                               n_seats_sum,
+                                               n_seats_pct,
+                                               n_seats_sum_weighted,
+                                               n_seats_pct_weighted) %>%
+              rename(n_seats_gemeinde = n_seats_sum,
+                     n_seats_pct_gemeinde = n_seats_pct,
+                     n_seats_sum_weighted_gemeinde = n_seats_sum_weighted,
+                     n_seats_pct_weighted_gemeinde = n_seats_pct_weighted),
+            by = c("year", "Partei")) %>% 
+  filter(!is.na(Partei))
+
+
+# Parteistärke anwenden und aufsummieren
+# Neue Spalten mit den gewichteten Parolen berechnen
+voting_5y_long_strength_wtd <- voting_5y_long_strength %>%
+  mutate(
+    parole_Nein_wtd_state     = parole_Nein   * n_seats_pct_state,
+    parole_Ja_wtd_state       = parole_Ja     * n_seats_pct_state,
+    parole_Keine_wtd_state    = parole_keine  * n_seats_pct_state,
+    
+    parole_Nein_wtd_kt        = parole_Nein   * n_seats_pct_weighted_kt,
+    parole_Ja_wtd_kt          = parole_Ja     * n_seats_pct_weighted_kt,
+    parole_Keine_wtd_kt       = parole_keine  * n_seats_pct_weighted_kt,
+    
+    parole_Nein_wtd_gem       = parole_Nein   * n_seats_pct_weighted_gemeinde,
+    parole_Ja_wtd_gem         = parole_Ja     * n_seats_pct_weighted_gemeinde,
+    parole_Keine_wtd_gem      = parole_keine  * n_seats_pct_weighted_gemeinde)
+
+#Gruppieren und aufsummieren nach anr und year
+voting_5y_long_strength_wtd_summary <- voting_5y_long_strength_wtd %>%
+  group_by(anr, year, annahme) %>%
+  summarise(
+    state_parole_Nein       = sum(parole_Nein_wtd_state, na.rm = TRUE),
+    state_parole_Ja         = sum(parole_Ja_wtd_state, na.rm = TRUE),
+    state_parole_Keine      = sum(parole_Keine_wtd_state, na.rm = TRUE),
+    
+    kt_parole_Nein          = sum(parole_Nein_wtd_kt, na.rm = TRUE),
+    kt_parole_Ja            = sum(parole_Ja_wtd_kt, na.rm = TRUE),
+    kt_parole_Keine         = sum(parole_Keine_wtd_kt, na.rm = TRUE),
+    
+    gemeinde_parole_Nein    = sum(parole_Nein_wtd_gem, na.rm = TRUE),
+    gemeinde_parole_Ja      = sum(parole_Ja_wtd_gem, na.rm = TRUE),
+    gemeinde_parole_Keine   = sum(parole_Keine_wtd_gem, na.rm = TRUE),
+    .groups = "drop")
+
+
+#TODO: Clean-up "voting" tabellen
+
+
+```
+
+## Abstimmungen
+
+```{r}
+
+###HIER WEITERARBEITEN - Felder selektionieren
+ 
+voting_5y_long_strength_wtd_summary
+
+  # select("anr",
+  #        "year",
+  #        "datum",
+  #        "titel_kurz_d",
+  #        "rechtsform",
+  #        "dep",
+  #        "annahme",
+  #        "berecht",
+  #        "stimmen",
+  #        "bet",       # Stimmbeteiligung
+  #        "leer",
+  #        "ungultig",
+  #        "gultig",
+  #        "volkja",
+  #        "volknein",
+  #        "volkja-proz",
+  #        "Partei",
+  #        "parole_Nein",
+  #        "parole_Ja",
+  #        "parole_keine",
+  #        ) %>%
+  
+
+
+# Relevante Felder selektionieren
+voting_5y_reduced_fields <- voting_5y %>%
+  select(anr,
+         datum,
+         titel_kurz_d,
+         titel_off_d,
+         rechtsform, #1 Obligatorisches Referendum
+                     #2 Fakultatives Referendum
+                     #3 Volksinitiative
+                     #4 Direkter Gegenentwurf zu einer Volksinitiative
+                     #5 Stichfrage
+         dep,
+         `br-pos`,   
+                     #1 Befürwortend
+                     #2 Ablehnend
+                     #3 Keine
+                     #8 Vorzug für den Gegenentwurf (bei Stichfragen)
+                     #9 Vorzug für die Volksinitiative (bei Stichfragen)
+                     #. Missing
+         legisjahr,
+         `pa-iv`,
+         `bv-pos`,   
+                     #1 Befürwortend
+                     #2 Ablehnend
+                     #3 Keine Abstimmungsempfehlung des Parlaments
+                     #8 Vorzug für den Gegenentwurf (bei Stichfragen)
+         `nr-pos`,   
+                     #1 Befürwortende Mehrheit im Nationalrat
+                     #2 Ablehnende Mehrheit im Nationalrat
+                     #3 Keine Abstimmungsempfehlung des Nationalrats
+                     #8 Vorzug für den Gegenentwurf (bei Stichfragen)
+         nrja,
+         nrnein,
+         `sr-pos`,   
+                     #1 Befürwortende Mehrheit im Ständerat
+                     #2 Ablehnende Mehrheit im Ständerat
+                     #3 Keine Abstimmungsempfehlung des Ständerats
+                     #8 Vorzug für den Gegenentwurf (bei Stichfragen)
+         srja,
+         srnein,
+         # Parteiparolen
+         starts_with("p-"),
+                     #1 Ja-Parole
+                     #2 Nein-Parole
+                     #3 keine Parole abzugeben
+                     #4 empfahl, einen leeren Stimmzettel einzulegen
+                     #5 Stimmfreigabe
+                     #8 Bevorzugung des Gegenentwurfs (bei Stichfrage)
+                     #9 Bevorzugung der Volksinitiative (bei Stichfrage)
+                     #66 Neutral: keine Parole oder Empfehlung auf leer einlegen                        #9999 Organisation existiert nicht
+                     #. Unbekannt
+         # Parteiparolen Kanton / Parteisektion
+         starts_with("pdev-"),
+                     #1 Ja-Parole
+                     #2 Nein-Parole
+                     #3 keine Parole abzugeben
+                     #4 empfahl, einen leeren Stimmzettel einzulegen
+                     #5 Stimmfreigabe
+                     #8 Bevorzugung des Gegenentwurfs (bei Stichfrage)
+                     #9 Bevorzugung der Volksinitiative (bei Stichfrage)
+                     # [leer] Parole gleich wie Mutterpartei (oder unbekannt)         
+         volk,       #0 Eine Mehrheit der Abstimmenden hat die Vorlage abgelehnt
+                     #1 Eine Mehrheit der Abstimmenden hat die Vorlage angenommen
+                     #8 Bei Stichfragen:  Mehrheit für Gegenentwurfs
+                     #9 Bei Stichfragen:  Mehrheit Volksinitiative
+         stand,
+                     #0 Die Vorlage hat keine Mehrheit der Standesstimmen er-reicht
+                     #1 Die Vorlage hat die Mehrheit der Standesstimmen erreicht
+                     #3 Ständemehr nicht notwendig
+                     #8 Bei Stichfragen: Mehrheit für Gegenentwurf
+                     #9 Bei Stichfragen: Mehrheit für Volksinitiative
+         annahme,    #0 Ablehnung der Vorlage
+                     #1 Annahme der Vorlage
+                     #8 Bei Stichfragen: Gegenentwurf angenommen
+                     #9 Bei Stichfragen: Volksinitiative angenommen
+                     #. Bei Stichfragen: Ergebnis der Stichfrage obsolet
+         berecht,
+         stimmen,
+         bet,
+         leer,
+         ungultig,
+         gultig,
+         volkja,
+         volknein,
+         `volkja-proz`)
+
+```
+
+```{r}
+
+
+
+```
+
+###################### 
+
+## Parteilandschaft
+
+```{r}
+#| label: load_parties_rating
+
+parties_rating <- read_excel("data/parties_economic_socio-political_rating.xlsx",
+                             sheet = "matrix_eco-socio_enhanced")
+```
+
+## Lookup tables
+
+### Parteinamen
+
+Die verschiedenen Quellen verwenden teils unteschiedliche Parteibezeichnungen. Zur Vereinheitlichung wird deshalb initial eine Lookup Tabelle gebildet.
+
+```{r}
+#| label: load_parties
+
+# National- und Ständerat
+print(lookup_elec_nr_sr_combined_parties_label %>%
+        distinct(),
+      n = 3)
+
+# Kantonale Regierung
+print(lookup_kantonale_regierung_parties_label %>%
+        distinct(),
+      n = 3)
+
+# Gemeinde Exekutiven
+print(lookup_gemeinde_exekutiven_parties_label %>%
+        distinct(),
+      n = 3)
+
+# Abstimmungen
+print(lookup_input_party_label_vote %>%
+        distinct(),
+      n = 3)
+
+
+# Alle Dataframes zu einem zusammenführen, Duplikate entfernen und Master joinen
+lookup_all_parties <- bind_rows(
+  lookup_elec_nr_sr_combined_parties_label,
+  lookup_kantonale_regierung_parties_label,
+  lookup_gemeinde_exekutiven_parties_label,
+  lookup_input_party_label_vote)%>%
+  distinct() %>% 
+  left_join(lookups_codebook_parties %>%
+              select(short_name,
+                     Partei,
+                     Parteiname),
+            by = "short_name") %>%
+  select(Partei,
+         Parteiname,
+         everything())
+
+write_xlsx(lookup_all_parties, "lookup_all.xlsx")
+```
+
+# Transformation & visualization
+
+```{r}
+
+
+
+
+```
+
+```{r}
+
+voting_5y_plot_data <- voting_5y %>% 
+  select(datum,
+         titel_kurz_d,
+         rechtsform,
+         annahme)
+
+split_list <- voting_5y_plot_data %>%
+  group_by(rechtsform) %>%
+  group_split()      
+
+voting_obli_referendum <- split_list[[1]]
+voting_faku_referendum <- split_list[[2]]
+voting_volksinitiative <- split_list[[3]]
+
+# Heatmap erstellen
+plot_data <- voting_5y_plot_data %>%
+  mutate(annahme = factor(annahme, levels = c("0", "1"), labels = c("Nein", "Ja")))
+
+# Heatmap
+ggplot(plot_data,
+       aes(x = annahme,
+           y = titel_kurz_d,
+           fill = annahme)) +
+  geom_tile(color = "white") +
+  scale_fill_manual(values = c("Nein" = "red", "Ja" = "green")) +
+  labs(
+    title = "Heatmap der Abstimmungsergebnisse",
+    x = "Ergebnis",
+    y = "Vorlage",
+    fill = "Annahme"
+  ) +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 8))
+
+
+
+
+
+plot_data <- voting_5y_plot_data %>%
+  mutate(annahme = factor(annahme, levels = c("0","1"), labels = c("Nein", "Ja")))
+
+levels(plot_data$annahme)
+
+ggplot(plot_data,
+       aes(x = annahme,
+           y = titel_kurz_d,
+           fill = annahme)) +
+  geom_tile(color = "white") +
+  scale_fill_manual(values = c("Nein" = "red", "Ja" = "green")) +
+  labs(
+    title = "Heatmap der Abstimmungsergebnisse",
+    x = "Ergebnis",
+    y = "Vorlage",
+    fill = "Annahme"
+  ) +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 8)) +
+  facet_wrap(~ rechtsform, scales = "free_y")
+
+
+```
+
+#### visualisiseren
+
+```{r}
+
+##DATUMSFILTER##
+# Beispiel: für das Jahr 2020
+jahr <- 2020
+
+df_plot <- voting_5y_party_strength_summary %>%
+  filter(year == jahr) %>%
+  select(anr, starts_with("state_parole_")) %>%
+  pivot_longer(
+    cols = starts_with("state_parole_"),
+    names_to = "parole_typ",
+    values_to = "wert"
+  ) %>%
+  mutate(
+    parole_typ = case_when(
+      grepl("_Nein$", parole_typ) ~ "Nein",
+      grepl("_Ja$", parole_typ) ~ "Ja",
+      grepl("_Keine$", parole_typ) ~ "Keine"
+    ),
+    anr = factor(anr, levels = unique(anr)) # Reihenfolge fixieren
+  )
+
+# Plot: jede Zeile ist eine Abstimmung (anr), Balken zeigt die Verteilung Nein/Ja/Keine
+ggplot(df_plot, aes(x = anr, y = wert, fill = parole_typ)) +
+  geom_bar(stat = "identity", position = "fill", width = 1) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  coord_flip() +
+  labs(
+    x = "Abstimmung (anr)",
+    y = "Anteil",
+    fill = "Parole",
+    title = paste("Verteilung Ja/Nein/Keine pro Abstimmung –", jahr)
+  ) +
+  theme_minimal()
+
+
+```
+
+```{r}
+
+# Tatsächliches Abstiummungsergebnis (annahme) auch abbilden
+
+##DATUMSFILTER##
+jahr <- 2020
+
+# Daten für den Balkenplot vorbereiten
+df_plot <- voting_5y_party_strength_summary %>%
+  filter(year == jahr) %>%
+  select(anr, starts_with("state_parole_")) %>%
+  pivot_longer(
+    cols = starts_with("state_parole_"),
+    names_to = "parole_typ",
+    values_to = "wert"
+  ) %>%
+  mutate(
+    parole_typ = case_when(
+      grepl("_Nein$", parole_typ) ~ "Nein",
+      grepl("_Ja$", parole_typ) ~ "Ja",
+      grepl("_Keine$", parole_typ) ~ "Keine"
+    ),
+    anr = factor(anr, levels = unique(anr)) # Reihenfolge fixieren
+  )
+
+# Annahme-Daten für die Punkte vorbereiten
+df_annahme <- voting_5y_party_strength_summary %>%
+  filter(year == jahr) %>%
+  select(anr, annahme) %>%
+  mutate(
+    anr = factor(anr, levels = unique(df_plot$anr)),
+    annahme = as.numeric(annahme) # Annahme: 0 oder 1
+  )
+
+# Plot mit Balken und Annahme-Punkt
+ggplot() +
+  geom_bar(
+    data = df_plot,
+    mapping = aes(x = anr, y = wert, fill = parole_typ),
+    stat = "identity",
+    position = "fill",
+    width = 1
+  ) +
+  geom_point(
+    data = df_annahme,
+    mapping = aes(x = anr, y = annahme),
+    color = "black", size = 3
+  ) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  coord_flip() +
+  labs(
+    x = "Abstimmung (anr)",
+    y = "Anteil",
+    fill = "Parole",
+    title = paste("Verteilung Ja/Nein/Keine pro Abstimmung –", jahr)
+  ) +
+  theme_minimal()
+
+
+
+```
+
+```{r}
+
+# tatsächliches Abstiummungsergebnis bei 0 (0) oder 100% (1) als PUnkt darstellen.
+
+##DATUMSFILTER##
+jahr <- 2020
+
+df_plot <- voting_5y_party_strength_summary %>%
+  filter(year == jahr) %>%
+  select(anr, 
+         starts_with("state_parole_"), 
+         starts_with("kt_parole_"), 
+         starts_with("gemeinde_parole_")) %>%
+  pivot_longer(
+    cols = -anr,
+    names_to = "parole_spalte",
+    values_to = "wert"
+  ) %>%
+  mutate(
+    # Parole-Typ extrahieren (Ja/Nein/Keine)
+    parole_typ = case_when(
+      grepl("_Nein$", parole_spalte) ~ "Nein",
+      grepl("_Ja$", parole_spalte) ~ "Ja",
+      grepl("_Keine$", parole_spalte) ~ "Keine"
+    ),
+    # Parolen-Ebene extrahieren (state/kt/gemeinde)
+    parole_ebene = case_when(
+      grepl("^state_parole_", parole_spalte) ~ "Bund",
+      grepl("^kt_parole_", parole_spalte) ~ "Kanton",
+      grepl("^gemeinde_parole_", parole_spalte) ~ "Gemeinde"
+    ),
+    anr = factor(anr, levels = unique(anr))
+  )
+
+# Beispielplot: Facetten nach Parolenebene
+ggplot(df_plot, aes(x = anr, y = wert, fill = parole_typ)) +
+  geom_bar(stat = "identity", position = "fill", width = 1) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  coord_flip() +
+  facet_wrap(~parole_ebene, ncol = 1) +
+  labs(
+    x = "Abstimmung (anr)",
+    y = "Anteil",
+    fill = "Parole",
+    title = paste("Verteilung Ja/Nein/Keine pro Abstimmung –", jahr)
+  ) +
+  theme_minimal()
+
+
+```
+
+```{r}
+
+# nicht nur state_parole_ sondern auch kt_parole_ und gemeinde_parole_ anzeigen.
+
+##DATUMSFILTER##
+jahr <- 2020
+
+# Daten für den Balkenplot vorbereiten (alle parole-Spalten, Quelle extrahieren)
+df_plot <- voting_5y_party_strength_summary %>%
+  filter(year == jahr) %>%
+  select(anr, matches("^(state|kt|gemeinde)_parole_")) %>%
+  pivot_longer(
+    cols = matches("^(state|kt|gemeinde)_parole_"),
+    names_to = "parole_typ",
+    values_to = "wert"
+  ) %>%
+  mutate(
+    parole_quelle = case_when(
+      grepl("^state_parole_", parole_typ) ~ "Kanton",
+      grepl("^kt_parole_", parole_typ) ~ "Kantonale Partei",
+      grepl("^gemeinde_parole_", parole_typ) ~ "Gemeinde"
+    ),
+    parole_typ = case_when(
+      grepl("_Nein$", parole_typ) ~ "Nein",
+      grepl("_Ja$", parole_typ) ~ "Ja",
+      grepl("_Keine$", parole_typ) ~ "Keine"
+    ),
+    anr = factor(anr, levels = unique(anr)),
+    parole_quelle = factor(parole_quelle, levels = c("Kanton", "Kantonale Partei", "Gemeinde"))
+  )
+
+# Annahme-Daten für die Punkte vorbereiten
+df_annahme <- voting_5y_party_strength_summary %>%
+  filter(year == jahr) %>%
+  select(anr, annahme) %>%
+  mutate(
+    anr = factor(anr, levels = unique(df_plot$anr)),
+    annahme = as.numeric(annahme) # Annahme: 0 oder 1
+  )
+
+# Plot mit Balken und Annahme-Punkt, getrennt nach parole_quelle
+ggplot() +
+  geom_bar(
+    data = df_plot,
+    mapping = aes(x = anr, y = wert, fill = parole_typ),
+    stat = "identity",
+    position = "fill",
+    width = 1
+  ) +
+  geom_point(
+    data = df_annahme,
+    mapping = aes(x = anr, y = annahme),
+    color = "black", size = 3
+  ) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  coord_flip() +
+  facet_wrap(~ parole_quelle, ncol = 1, scales = "free_y") +
+  labs(
+    x = "Abstimmung (anr)",
+    y = "Anteil",
+    fill = "Parole",
+    title = paste("Verteilung Ja/Nein/Keine pro Abstimmung –", jahr)
+  ) +
+  theme_minimal()
+
+
+```
+
+```{r}
+
+# Gruppierung nach Abstimmung (anr)
+
+
+##DATUMSFILTER##
+jahr <- 2020
+
+# Daten für den Balkenplot vorbereiten (alle parole-Spalten, Quelle extrahieren)
+df_plot <- voting_5y_party_strength_summary %>%
+  filter(year == jahr) %>%
+  select(anr, matches("^(state|kt|gemeinde)_parole_")) %>%
+  pivot_longer(
+    cols = matches("^(state|kt|gemeinde)_parole_"),
+    names_to = "parole_typ",
+    values_to = "wert"
+  ) %>%
+  mutate(
+    parole_quelle = case_when(
+      grepl("^state_parole_", parole_typ) ~ "Kanton",
+      grepl("^kt_parole_", parole_typ) ~ "Kantonale Partei",
+      grepl("^gemeinde_parole_", parole_typ) ~ "Gemeinde"
+    ),
+    parole_typ = case_when(
+      grepl("_Nein$", parole_typ) ~ "Nein",
+      grepl("_Ja$", parole_typ) ~ "Ja",
+      grepl("_Keine$", parole_typ) ~ "Keine"
+    ),
+    parole_quelle = factor(parole_quelle, levels = c("Kanton", "Kantonale Partei", "Gemeinde")),
+    anr = factor(anr, levels = unique(anr))
+  )
+
+# Annahme-Daten für die Punkte vorbereiten
+df_annahme <- voting_5y_party_strength_summary %>%
+  filter(year == jahr) %>%
+  select(anr, annahme) %>%
+  mutate(
+    anr = factor(anr, levels = unique(df_plot$anr)),
+    annahme = as.numeric(annahme)
+  )
+
+# Plot: Gruppierung nach Abstimmung (anr)
+ggplot() +
+  geom_bar(
+    data = df_plot,
+    mapping = aes(x = parole_quelle, y = wert, fill = parole_typ),
+    stat = "identity",
+    position = "fill",
+    width = 0.7
+  ) +
+  geom_point(
+    data = df_annahme,
+    mapping = aes(x = 2, y = annahme), # x=2: Punkt mittig bei "Kantonale Partei"
+    color = "black", size = 3, inherit.aes = FALSE
+  ) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  facet_wrap(~ anr, ncol = 1) +
+  labs(
+    x = "Quelle der Parole",
+    y = "Anteil",
+    fill = "Parole",
+    title = paste("Verteilung Ja/Nein/Keine nach Quelle pro Abstimmung –", jahr)
+  ) +
+  theme_minimal()
+
+# TODO: Nicht nur pro Jahr sondern auch Departement? Tatsächliche ja/nein/enthalten hinzufügen.
+```
+
+## Parteilandschaft
+
+### Multi-Dimensions-Model
+
+#### Minimalwerte
+
+Für jede Partei den Minimalwert des Abstimmungsverhaltens zu verwenden, basiert auf der Zielsetzung, die klarste politische Position einer Partei in einem bestimmten Themenbereich zu identifizieren. Diese Methodik stellt sicher, dass auch bei wenigen Abweichungen von der Mehrheitslinie die tatsächliche Haltung der Partei deutlich erkennbar bleibt.
+
+```{r}
+
+
+ggplot(parties_rating,
+       aes(x = eco_pct_min_x,
+           y = socio_pct_min_y,
+           label = Partei)) +
+  geom_point(size = 3) +
+  geom_text(vjust = -0.8) +
+  geom_segment(aes(x = 50, xend = 50,
+                   y = 0, yend = 100), linetype = "dashed", color = "blue") +
+  geom_segment(aes(x = 0, xend = 100,
+                   y = 50, yend = 50), linetype = "dashed", color = "blue") +
+  
+  annotate("text",
+           x = 0,
+           y = min(parties_rating$socio_pct_min_y) + 55,
+           label = "Links/staatsgläubig", size = 4, hjust = 0.5) +
+  annotate("text",
+           x = 100,
+           y = min(parties_rating$socio_pct_min_y) + 55,
+           label = "Rechts/marktwirtschaftlich", size = 4, hjust = 0.5) +
+  annotate("text",
+           x = 50,
+           y = min(parties_rating$socio_pct_min_y) - 3,
+           label = "Autoritär/Konservativ", size = 4, hjust = 0.5) +
+  annotate("text",
+           x = 50,
+           y = min(parties_rating$socio_pct_min_y) + 103,
+           label = "Libertär/Progressiv", size = 4, hjust = 0.5) +
+  scale_x_continuous(limits = c(0, 100)) +
+  labs(x = "Wirtschaftspolitisch",
+       y = "Gesellschaftspolitisch",
+       title = "Politische Positionierung im Zwei-Achsen-Modell",
+       subtitle = "Grundlage: Minimalwerte des Abstimmungsverhaltens") +
+  theme_minimal()+
+  theme(plot.title = element_text(size = 18,
+                                  margin = margin(b = 30)),
+        axis.title.x = element_text(size = 14,
+                                    margin = margin(t = 5)),
+        axis.title.y = element_text(size = 14,
+                                    margin = margin(r = 5))) +
+  coord_cartesian(ylim = c(0, 105),
+                  xlim = c(0, 105),
+                  clip = "off")
+```
+
+#### Durchschnittswerte als Zentrum und Min/Max als Ellipse
+
+```{r}
+
+
+ggplot(parties_rating,
+       aes(x = eco_pct_avg_x,
+           y = socio_pct_avg_y,
+           label = Partei)) +
+  geom_ellipse(
+    aes(x0 = eco_pct_avg_x,
+        y0 = socio_pct_avg_y,
+        a = (eco_pct_max_x - eco_pct_min_x) / 2, # Halbachse x
+        b = (socio_pct_max_y - socio_pct_min_y) / 2, # Halbachse y
+        angle = 0),
+    fill = "gray80", alpha = 0.4) +
+  geom_point(size = 3) +
+  geom_text(vjust = -0.8) +
+  geom_segment(aes(x = 50, xend = 50,
+                   y = 0, yend = 100), linetype = "dashed", color = "blue") +
+  geom_segment(aes(x = 0, xend = 100,
+                   y = 50, yend = 50), linetype = "dashed", color = "blue") +
+  annotate("text",
+           x = 0,
+           y = min(parties_rating$socio_pct_min_y) + 55,
+           label = "Links/staatsgläubig", size = 4, hjust = 0.5) +
+  annotate("text",
+           x = 100,
+           y = min(parties_rating$socio_pct_min_y) + 55,
+           label = "Rechts/marktwirtschaftlich", size = 4, hjust = 0.5) +
+  annotate("text",
+           x = 50,
+           y = min(parties_rating$socio_pct_min_y) - 3,
+           label = "Autoritär/Konservativ", size = 4, hjust = 0.5) +
+  annotate("text",
+           x = 50,
+           y = min(parties_rating$socio_pct_min_y) + 103,
+           label = "Libertär/Progressiv", size = 4, hjust = 0.5) +
+  scale_x_continuous(limits = c(-10, +110)) +
+  labs(x = "Wirtschaftspolitisch",
+       y = "Gesellschaftspolitisch",
+       title = "Politische Positionierung im Zwei-Achsen-Modell",
+       subtitle = "Grundlage: Durchschnitt des Abstimmungsverhaltens als Zentrum, Min-/Max als Ellipse") +
+  theme_minimal()+
+  theme(plot.title = element_text(size = 18,
+                                  margin = margin(b = 30)),
+        axis.title.x = element_text(size = 14,
+                                    margin = margin(t = 5)),
+        axis.title.y = element_text(size = 14,
+                                    margin = margin(r = 5))) +
+  coord_cartesian(ylim = c(0, 100),
+                  xlim = c(0, 100),
+                  clip = "off")
+```
+
+#### Hauptparteien: Durchschnittswerte als Zentrum und Min/Max als Ellipse / Klein- und Regionalparteien nur mit ihrem Durchschnittswert
+
+```{r}
+
+
+ggplot(parties_rating,
+       aes(x = eco_pct_avg_x,
+           y = socio_pct_avg_y,
+           label = Partei)) +
+  geom_ellipse(aes(x0 = eco_pct_avg_x,
+                   y0 = socio_pct_avg_y,
+                   a = (eco_pct_max_x - eco_pct_min_x) / 2, # Halbachse x
+                   b = (socio_pct_max_y - socio_pct_min_y) / 2, # Halbachse y
+                   angle = 0),
+               fill = "gray80", alpha = 0.4) +
+  geom_point(size = 3) +
+  
+  # Kleinere Parteien
+  geom_point(data = subset(parties_rating,
+                           `Grosse Partei` == "n" &
+                             Relevanz_nationale_Abstimmungen != "-"),
+             aes(x = eco_x,
+                 y = socio_y),
+             shape = 21, fill = "grey", color = "black", size = 1, stroke = 1) +
+  
+  # Labels der kleineren Partein
+  geom_text(data = subset(parties_rating,
+                          `Grosse Partei` == "n" &
+                            Relevanz_nationale_Abstimmungen != "-"),
+            aes(x = eco_x,
+                y = socio_y,
+                label = Partei),
+            vjust = -1, fontface = "plain", color = "darkgrey") +
+  geom_text(vjust = -0.8) +
+  geom_segment(aes(x = 50, xend = 50,
+                   y = 0, yend = 100), linetype = "dashed", color = "blue") +
+  geom_segment(aes(x = 0, xend = 100,
+                   y = 50, yend = 50), linetype = "dashed", color = "blue") +
+  annotate("text",
+           x = 0,
+           y = min(parties_rating$socio_pct_min_y) + 55,
+           label = "Links/staatsgläubig", size = 4, hjust = 0.5) +
+  annotate("text",
+           x = 100,
+           y = min(parties_rating$socio_pct_min_y) + 55,
+           label = "Rechts/marktwirtschaftlich", size = 4, hjust = 0.5) +
+  annotate("text",
+           x = 50,
+           y = min(parties_rating$socio_pct_min_y) - 3,
+           label = "Autoritär/Konservativ", size = 4, hjust = 0.5) +
+  annotate("text",
+           x = 50,
+           y = min(parties_rating$socio_pct_min_y) + 103,
+           label = "Libertär/Progressiv", size = 4, hjust = 0.5) +
+  scale_x_continuous(limits = c(-10, +110)) +
+  labs(x = "Wirtschaftspolitisch",
+       y = "Gesellschaftspolitisch",
+       title = "Politische Positionierung im Zwei-Achsen-Modell",
+       subtitle = "Durchschnitt des Abstimmungsverhaltens als Zentrum, Min-/Max als Ellipse") +
+  theme_minimal()+
+  theme(plot.title = element_text(size = 18,
+                                  margin = margin(b = 30)),
+        axis.title.x = element_text(size = 14,
+                                    margin = margin(t = 5)),
+        axis.title.y = element_text(size = 14,
+                                    margin = margin(r = 5))) +
+  coord_cartesian(ylim = c(0, 100),
+                  xlim = c(0, 100),
+                  clip = "off")
+```
+
+#### Hauptparteien: Durchschnittswerte als Zentrum und Min/Max als Ellipse / Verbände sowie Klein- und Regionalparteien nur mit ihrem Durchschnittswert
+
+```{r}
+
+
+ggplot(parties_rating,
+       aes(x = eco_pct_avg_x,
+           y = socio_pct_avg_y,
+           label = Partei)) +
+  geom_ellipse(
+    aes(x0 = eco_pct_avg_x,
+        y0 = socio_pct_avg_y,
+        a = (eco_pct_max_x - eco_pct_min_x) / 2, # Halbachse x
+        b = (socio_pct_max_y - socio_pct_min_y) / 2, # Halbachse y
+        angle = 0),
+    fill = "gray80", alpha = 0.4) +
+  geom_point(size = 3) +
+  
+  # Kleinere Parteien
+  geom_point(data = subset(parties_rating,
+                           `Grosse Partei` == "n" #&
+                           #Relevanz_nationale_Abstimmungen != "-"
+                           )
+                  ,
+    aes(x = eco_x, y = socio_y),
+    shape = 21, fill = "grey", color = "black", size = 1, stroke = 1
+  ) +
+  # Labels der kleineren Partein
+  geom_text(data = subset(parties_rating,
+                          `Grosse Partei` == "n" #&
+                          #Relevanz_nationale_Abstimmungen != "-"
+                  )
+                  ,
+    aes(x = eco_x, y = socio_y, label = Partei),
+    vjust = -1, fontface = "plain", color = "darkgrey"
+  ) +
+
+  geom_text(vjust = -0.8) +
+  geom_segment(aes(x = 50, xend = 50,
+                   y = 0, yend = 100), linetype = "dashed", color = "blue") +
+  geom_segment(aes(x = 0, xend = 100,
+                   y = 50, yend = 50), linetype = "dashed", color = "blue") +
+  annotate("text",
+           x = 0,
+           y = min(parties_rating$socio_pct_min_y) + 55,
+           label = "Links/staatsgläubig", size = 4, hjust = 0.5) +
+  annotate("text",
+           x = 100,
+           y = min(parties_rating$socio_pct_min_y) + 55,
+           label = "Rechts/marktwirtschaftlich", size = 4, hjust = 0.5) +
+  annotate("text",
+           x = 50,
+           y = min(parties_rating$socio_pct_min_y) - 3,
+           label = "Autoritär/Konservativ", size = 4, hjust = 0.5) +
+  annotate("text",
+           x = 50,
+           y = min(parties_rating$socio_pct_min_y) + 103,
+           label = "Libertär/Progressiv", size = 4, hjust = 0.5) +
+  scale_x_continuous(limits = c(-10, +110)) +
+  labs(x = "Wirtschaftspolitisch",
+       y = "Gesellschaftspolitisch",
+       title = "Politische Positionierung im Zwei-Achsen-Modell",
+       subtitle = "Grundlage: Durchschnitt des Abstimmungsverhaltens als Zentrum, Min-/Max als Ellipse") +
+  theme_minimal()+
+  theme(plot.title = element_text(size = 18,
+                                  margin = margin(b = 30)),
+        axis.title.x = element_text(size = 14,
+                                    margin = margin(t = 5)),
+        axis.title.y = element_text(size = 14,
+                                    margin = margin(r = 5))) +
+  coord_cartesian(ylim = c(0, 100),
+                  xlim = c(0, 100),
+                  clip = "off")
+```
+
+### 3D-Koordinatensystem (Testweise)
+
+```{r}
+
+
+
+# Datenframe erstellen
+parties <- data.frame(
+  Partei = c("SP", "SVP", "FDP", "GPS", "GLP", "Mitte", "EVP", "EDU"),
+  Wirtschaft = c(20, 85, 80, 30, 60, 60, 40, 90),      # Links = niedrig, Rechts = hoch
+  Gesellschaft = c(90, 20, 55, 90, 75, 45, 50, 20),    # Libertär = hoch, Autoritär = niedrig
+  Kosmopolitismus = c(90, 15, 60, 95, 85, 50, 55, 20)  # Kosmopolitisch = hoch, Nationalistisch = niedrig
+)
+
+# Interaktives 3D-Scatterplot mit Plotly
+fig <- plot_ly(
+  data = parties,
+  x = ~Wirtschaft,
+  y = ~Gesellschaft,
+  z = ~Kosmopolitismus,
+  text = ~Partei,
+  type = 'scatter3d',
+  mode = 'markers+text',
+  marker = list(size = 5),
+  textposition = 'top center'
+)
+
+# Achsen benennen und Layout anpassen
+fig <- fig %>% layout(
+  scene = list(
+    xaxis = list(title = "Wirtschaftspolitik (links – rechts)"),
+    yaxis = list(title = "Gesellschaftspolitik (autoritär – libertär)"),
+    zaxis = list(title = "Kosmopolitismus – Nationalismus")
+  ),
+  title = "Schweizer Parteien im 3D-Koordinatensystem nach Kitschelt"
+)
+
+# Plot anzeigen
+fig
+
+
+```
