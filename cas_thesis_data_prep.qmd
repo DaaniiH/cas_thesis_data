@@ -1116,7 +1116,7 @@ voting_raw_5y <- voting_raw %>%
 lookup_input_party_label_vote <- bind_rows(
   # Block 1: Staatsebene - Mutterparteien, Verbände & weitere Organisationen
   tibble(party_orig_value = grep("^p-",
-                               names(voting_5y),
+                               names(voting_raw_5y),
                                value = TRUE)) %>%
     mutate(level = "state") %>%
     separate(
@@ -1128,7 +1128,7 @@ lookup_input_party_label_vote <- bind_rows(
       fill = "right"),
   # Block 2: Kantonsebene - Jungparteien, Frauensektionen, etc.
   tibble(party_orig_value = grep("^pdev-",
-                               names(voting_5y),
+                               names(voting_raw_5y),
                                value = TRUE)) %>%
     mutate(level = "canton_fraction") %>%
     separate(
@@ -1254,7 +1254,7 @@ lookup_pos$wert <- as.character(trimws(lookup_pos$wert))
 # value als Character
 lookup_parole$wert <- as.character(trimws(lookup_parole$wert))
 lookup_pos$wert <- as.character(trimws(lookup_pos$wert))
-voting_long$value <- as.character(trimws(voting_long$value))
+tmp_voting_long$value <- as.character(trimws(tmp_voting_long$value))
 
 # Join je nach variable-Typ
 tmp_voting_long <- tmp_voting_long %>%
@@ -1293,7 +1293,7 @@ tmp_voting_long$dummy <- 1L
 # Pivotieren: Jede label-Ausprägung wird eigene Spalte, 1 falls zutreffend, sonst 0
 tmp_voting_wide <- tmp_voting_long %>%
   pivot_wider(
-    id_cols = setdiff(names(voting_long), c("value", "label", "dummy")),
+    id_cols = setdiff(names(tmp_voting_long), c("value", "label", "dummy")),
     names_from = label,
     values_from = dummy,
     values_fill = 0)
