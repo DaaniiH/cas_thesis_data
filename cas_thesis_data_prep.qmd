@@ -131,7 +131,19 @@ Wahlberechtigte_1990_2024 <- read_excel("data/Wahlberechtigte_1990-2024.xlsx",
 #| label: load_lookup_parties
 
 # Konsolidierte, bereinigte Lookup-Tabelle einlesen
-lookup_parties_consolidated <- read_excel("data/lookup_parties_consolidated.xlsx")
+lookup_parties_consolidated_raw <- read_excel("data/lookup_parties_consolidated.xlsx")
+
+# Duplikatzeilen anzeigen (für "party_orig_value")
+duplikate <- lookup_parties_consolidated_raw %>%
+  group_by(party_orig_value) %>%
+  filter(n() > 1) %>%
+  ungroup()
+
+View(duplikate)
+
+# Duplikate (von Execel nicht erkannt..) entfernen
+lookup_parties_consolidated <- lookup_parties_consolidated_raw %>%
+  distinct(party_orig_value, .keep_all = TRUE)
 ```
 
 ## Wahlen - Daten laden & Umformen
@@ -760,6 +772,16 @@ elec_canton_combined$year <- as.integer(as.character(elec_canton_combined$year))
 elec_gemeinde_combined$year <- as.integer(as.character(elec_gemeinde_combined$year))
 
 
+lookup_parties_consolidated %>%
+  count(party_orig_value) %>%
+  filter(n > 1)
+
+lookup_parties_consolidated %>%
+  distinct(party_orig_value, .keep_all = TRUE)
+
+
+#write_xlsx(elec_all_combined,"tmp_elec_all_combined.xlsx")
+
 # Vereinheitlichte Dataframes (Exekutiven je Staatsebene) konsolidieren
 elec_all_combined <- bind_rows(elec_nr_sr_combined,
                                elec_canton_combined,
@@ -801,7 +823,7 @@ elec_all_combined_input <-  elec_all_combined %>%
   filter(year >= "2019")
 ```
 
-#### Dataframes verinhetlichen und ggfs. aggregieren
+#### Dataframes vereinheitlichen und ggfs. aggregieren
 
 ##### Staatsebene: National- und Ständerat "as is"
 
@@ -1053,15 +1075,15 @@ for (name in df_names) {
 ```{r}
 
 #TODO: Wofür?
- 
-
-# Manuell migrierte Lookup Tabellen aus dem PDF-Codebook (swissvotes.ch) laden
-# Parteien
-lookups_codebook_parties <- read_excel("data/lookup_codebook.xlsx",
-                                       sheet = "parties")
-# Parteiparolen
-lookups_codebook_paroles <- read_excel("data/lookup_codebook.xlsx",
-                                       sheet = "paroles")
+#  
+# 
+# # Manuell migrierte Lookup Tabellen aus dem PDF-Codebook (swissvotes.ch) laden
+# # Parteien
+# lookups_codebook_parties <- read_excel("data/lookup_codebook.xlsx",
+#                                        sheet = "parties")
+# # Parteiparolen
+# lookups_codebook_paroles <- read_excel("data/lookup_codebook.xlsx",
+#                                        sheet = "paroles")
 
 ```
 
@@ -1301,12 +1323,14 @@ tmp_voting_wide <- tmp_voting_long %>%
 voting_5y_long <- tmp_voting_wide
 ```
 
-#### Parteinamen ergänzen
+#### Parteinamen ergänzen & Zeilen mit "-pos"-Endung entfernen
 
 ```{r}
 #| label: add_party_names
 
 tmp_voting_5y_long <- voting_5y_long %>%
+  # Zeilen mit "-pos" in Spalte "variable" herausfiltern 
+  filter(!str_detect(variable, "-pos$")) %>%
   left_join(lookup_parties_consolidated %>% select(party_orig_value,
                                                    Partei),
             by = c("variable" = "party_orig_value")) %>% 
@@ -1319,6 +1343,136 @@ rm(tmp_voting_5y_long)
 #### Parteistärken ergänzen
 
 ```{r}
+
+
+# # "year" in Quellen as.numeric() definieren
+# elec_nr_sr_lvl_state <- elec_nr_sr_lvl_state %>%
+#   mutate(year = as.numeric(year))
+# elec_kanton_lvl_state <- elec_kanton_lvl_state %>%
+#   mutate(year = as.numeric(year))
+# elec_gemeinde_lvl_state <- elec_gemeinde_lvl_state %>%
+#   mutate(year = as.numeric(year))
+# 
+# 
+# # Parteistärken (Staatsebende) dazu laden
+# voting_5y_long_strength <- voting_5y_long %>%
+#   filter(!grepl("^pdev-", variable)) %>%      # pdev- vorläufig ausschliessen
+#   mutate(year = as.numeric(year(datum))) %>%
+#   ##temp
+#   select(anr, year, Partei, variable, annahme, parole_Ja, parole_Nein, parole_keine)   %>% 
+#   
+#   #National- und Ständerat
+#   left_join(elec_nr_sr_lvl_state %>% select(year,
+#                                             Partei,
+#                                             n_seats_sum,
+#                                             n_seats_pct) %>%
+#               rename(n_seats_state = n_seats_sum,
+#                      n_seats_pct_state = n_seats_pct),
+#             by = c("year",
+#                    "Partei")) %>%
+#   #Kanton
+#   left_join(elec_kanton_lvl_state %>% select(year,
+#                                             Partei,
+#                                             n_seats_sum,
+#                                             n_seats_pct,
+#                                             n_seats_sum_weighted,
+#                                             n_seats_pct_weighted) %>%
+#               rename(n_seats_kanton = n_seats_sum,
+#                      n_seats_pct_kanton = n_seats_pct,
+#                      n_seats_sum_weighted_kt = n_seats_sum_weighted,
+#                      n_seats_pct_weighted_kt = n_seats_pct_weighted),
+#         by = c("year", "Partei")) %>%
+#   #Gemeinde
+#   left_join(elec_gemeinde_lvl_state %>% select(year,
+#                                                Partei,
+#                                                n_seats_sum,
+#                                                n_seats_pct,
+#                                                n_seats_sum_weighted,
+#                                                n_seats_pct_weighted) %>%
+#               rename(n_seats_gemeinde = n_seats_sum,
+#                      n_seats_pct_gemeinde = n_seats_pct,
+#                      n_seats_sum_weighted_gemeinde = n_seats_sum_weighted,
+#                      n_seats_pct_weighted_gemeinde = n_seats_pct_weighted),
+#             by = c("year", "Partei")) %>% 
+#   filter(!is.na(Partei))
+# 
+# # ##temp
+#  write_xlsx(voting_5y_long_strength, "tmp_voting_5y_long_strength.xlsx")
+# 
+# 
+# # Parteistärke anwenden und aufsummieren
+# 
+#  
+# ###################################################### 
+# # #tmp
+# # voting_5y_long_strength_with_seats <- voting_5y_long_strength %>% 
+# #    filter(n_seats_state > 0 |
+# #           n_seats_kanton > 0 |
+# #           n_seats_gemeinde > 0)
+# 
+#  voting_5y_long_strength %>%
+#   group_by(anr, year) %>%
+#   summarise(sum_n_seats_pct_state = sum(n_seats_pct_state, na.rm = TRUE)) %>% 
+#    print(n=Inf)
+#  
+#  sum(is.na(voting_5y_long_strength$n_seats_pct_state))
+#  
+#  # Summe der Parolen pro Partei
+# voting_5y_long_strength %>%
+#   mutate(parole_sum = parole_Ja + parole_Nein + parole_keine) %>%
+#   summarise(min_parole_sum = min(parole_sum, na.rm = TRUE),
+#             max_parole_sum = max(parole_sum, na.rm = TRUE))
+#  
+# voting_5y_long_strength_wtd_summary %>%
+#   mutate(state_parole_sum = state_parole_Nein + state_parole_Ja + state_parole_Keine) %>%
+#   select(anr, year, state_parole_sum)
+#  
+# 
+# str(voting_5y_long_strength)
+# #################################################
+# 
+#  
+# 
+# 
+# # Neue Spalten mit den gewichteten Parolen berechnen
+# voting_5y_long_strength_wtd <- voting_5y_long_strength %>%
+#   mutate(
+#     parole_Nein_wtd_state     = parole_Nein   * n_seats_pct_state,
+#     parole_Ja_wtd_state       = parole_Ja     * n_seats_pct_state,
+#     parole_Keine_wtd_state    = parole_keine  * n_seats_pct_state,
+#     
+#     parole_Nein_wtd_kt        = parole_Nein   * n_seats_pct_weighted_kt,
+#     parole_Ja_wtd_kt          = parole_Ja     * n_seats_pct_weighted_kt,
+#     parole_Keine_wtd_kt       = parole_keine  * n_seats_pct_weighted_kt,
+#     
+#     parole_Nein_wtd_gem       = parole_Nein   * n_seats_pct_weighted_gemeinde,
+#     parole_Ja_wtd_gem         = parole_Ja     * n_seats_pct_weighted_gemeinde,
+#     parole_Keine_wtd_gem      = parole_keine  * n_seats_pct_weighted_gemeinde)
+# 
+# #Gruppieren und aufsummieren nach anr und year
+# voting_5y_long_strength_wtd_summary <- voting_5y_long_strength_wtd %>%
+#   group_by(anr, year, annahme) %>%
+#   summarise(
+#     state_parole_Nein       = sum(parole_Nein_wtd_state, na.rm = TRUE),
+#     state_parole_Ja         = sum(parole_Ja_wtd_state, na.rm = TRUE),
+#     state_parole_Keine      = sum(parole_Keine_wtd_state, na.rm = TRUE),
+#     
+#     kt_parole_Nein          = sum(parole_Nein_wtd_kt, na.rm = TRUE),
+#     kt_parole_Ja            = sum(parole_Ja_wtd_kt, na.rm = TRUE),
+#     kt_parole_Keine         = sum(parole_Keine_wtd_kt, na.rm = TRUE),
+#     
+#     gemeinde_parole_Nein    = sum(parole_Nein_wtd_gem, na.rm = TRUE),
+#     gemeinde_parole_Ja      = sum(parole_Ja_wtd_gem, na.rm = TRUE),
+#     gemeinde_parole_Keine   = sum(parole_Keine_wtd_gem, na.rm = TRUE),
+#     .groups = "drop")
+
+
+
+
+
+```
+
+```{r}
 #| label: add_party_strength
 
 # "year" in Quellen as.numeric() definieren
@@ -1329,12 +1483,13 @@ elec_kanton_lvl_state <- elec_kanton_lvl_state %>%
 elec_gemeinde_lvl_state <- elec_gemeinde_lvl_state %>%
   mutate(year = as.numeric(year))
 
-
-# Parteistärken (Staatsebende) dazu laden
+# Parteistärken (Staatsebene) dazu laden
 voting_5y_long_strength <- voting_5y_long %>%
   filter(!grepl("^pdev-", variable)) %>%      # pdev- vorläufig ausschliessen
-  mutate(year = as.numeric(year(datum))) %>% 
-  #National- und Ständerat
+  mutate(year = as.numeric(year(datum))) %>%
+  select(anr, year, Partei, annahme, parole_Ja, parole_Nein, parole_keine) %>% 
+  
+  # National- und Ständerat
   left_join(elec_nr_sr_lvl_state %>% select(year,
                                             Partei,
                                             n_seats_sum,
@@ -1343,7 +1498,7 @@ voting_5y_long_strength <- voting_5y_long %>%
                      n_seats_pct_state = n_seats_pct),
             by = c("year",
                    "Partei")) %>%
-  #Kanton
+  # Kanton
   left_join(elec_kanton_lvl_state %>% select(year,
                                             Partei,
                                             n_seats_sum,
@@ -1354,8 +1509,8 @@ voting_5y_long_strength <- voting_5y_long %>%
                      n_seats_pct_kanton = n_seats_pct,
                      n_seats_sum_weighted_kt = n_seats_sum_weighted,
                      n_seats_pct_weighted_kt = n_seats_pct_weighted),
-        by = c("year", "Partei")) %>%
-  #Gemeinde
+            by = c("year", "Partei")) %>%
+  # Gemeinde
   left_join(elec_gemeinde_lvl_state %>% select(year,
                                                Partei,
                                                n_seats_sum,
@@ -1366,46 +1521,70 @@ voting_5y_long_strength <- voting_5y_long %>%
                      n_seats_pct_gemeinde = n_seats_pct,
                      n_seats_sum_weighted_gemeinde = n_seats_sum_weighted,
                      n_seats_pct_weighted_gemeinde = n_seats_pct_weighted),
-            by = c("year", "Partei")) %>% 
-  filter(!is.na(Partei))
+            by = c("year", "Partei")) %>%
+  filter(!is.na(Partei)) %>%
+  # Prozentwerte pro anr/year normieren (Für noch enthaltene Parteien)
+  group_by(anr, year) %>%
+  mutate(n_seats_pct_state_norm =
+           n_seats_pct_state / sum(n_seats_pct_state,
+                                   na.rm = TRUE),
+         n_seats_pct_weighted_kt_norm =
+           n_seats_pct_weighted_kt / sum(n_seats_pct_weighted_kt,
+                                         na.rm = TRUE),
+         n_seats_pct_weighted_gemeinde_norm =
+           n_seats_pct_weighted_gemeinde / sum(n_seats_pct_weighted_gemeinde,
+                                               na.rm = TRUE)) %>%
+  ungroup()
 
 
 # Parteistärke anwenden und aufsummieren
-# Neue Spalten mit den gewichteten Parolen berechnen
-voting_5y_long_strength_wtd <- voting_5y_long_strength %>%
-  mutate(
-    parole_Nein_wtd_state     = parole_Nein   * n_seats_pct_state,
-    parole_Ja_wtd_state       = parole_Ja     * n_seats_pct_state,
-    parole_Keine_wtd_state    = parole_keine  * n_seats_pct_state,
-    
-    parole_Nein_wtd_kt        = parole_Nein   * n_seats_pct_weighted_kt,
-    parole_Ja_wtd_kt          = parole_Ja     * n_seats_pct_weighted_kt,
-    parole_Keine_wtd_kt       = parole_keine  * n_seats_pct_weighted_kt,
-    
-    parole_Nein_wtd_gem       = parole_Nein   * n_seats_pct_weighted_gemeinde,
-    parole_Ja_wtd_gem         = parole_Ja     * n_seats_pct_weighted_gemeinde,
-    parole_Keine_wtd_gem      = parole_keine  * n_seats_pct_weighted_gemeinde)
+# # tmp
+# voting_5y_long_strength_with_seats <- voting_5y_long_strength %>% 
+#   filter(n_seats_state > 0 |
+#          n_seats_kanton > 0 |
+#          n_seats_gemeinde > 0)
 
-#Gruppieren und aufsummieren nach anr und year
+# Neue Spalten mit den gewichteten Parolen berechnen (mit den normierten Prozentwerten)
+voting_5y_long_strength_wtd <- voting_5y_long_strength_with_seats %>%
+  mutate(
+    parole_Nein_wtd_state     = parole_Nein   * n_seats_pct_state_norm,
+    parole_Ja_wtd_state       = parole_Ja     * n_seats_pct_state_norm,
+    parole_Keine_wtd_state    = parole_keine  * n_seats_pct_state_norm,
+    
+    parole_Nein_wtd_kt        = parole_Nein   * n_seats_pct_weighted_kt_norm,
+    parole_Ja_wtd_kt          = parole_Ja     * n_seats_pct_weighted_kt_norm,
+    parole_Keine_wtd_kt       = parole_keine  * n_seats_pct_weighted_kt_norm,
+    
+    parole_Nein_wtd_gem       = parole_Nein   * n_seats_pct_weighted_gemeinde_norm,
+    parole_Ja_wtd_gem         = parole_Ja     * n_seats_pct_weighted_gemeinde_norm,
+    parole_Keine_wtd_gem      = parole_keine  * n_seats_pct_weighted_gemeinde_norm)
+
+# Gruppieren und aufsummieren nach anr und year
 voting_5y_long_strength_wtd_summary <- voting_5y_long_strength_wtd %>%
   group_by(anr, year, annahme) %>%
   summarise(
-    state_parole_Nein       = sum(parole_Nein_wtd_state, na.rm = TRUE),
-    state_parole_Ja         = sum(parole_Ja_wtd_state, na.rm = TRUE),
-    state_parole_Keine      = sum(parole_Keine_wtd_state, na.rm = TRUE),
+    state_parole_Nein       = 100 * sum(parole_Nein_wtd_state, na.rm = TRUE),
+    state_parole_Ja         = 100 * sum(parole_Ja_wtd_state, na.rm = TRUE),
+    state_parole_Keine      = 100 * sum(parole_Keine_wtd_state, na.rm = TRUE),
     
-    kt_parole_Nein          = sum(parole_Nein_wtd_kt, na.rm = TRUE),
-    kt_parole_Ja            = sum(parole_Ja_wtd_kt, na.rm = TRUE),
-    kt_parole_Keine         = sum(parole_Keine_wtd_kt, na.rm = TRUE),
+    kt_parole_Nein          = 100 * sum(parole_Nein_wtd_kt, na.rm = TRUE),
+    kt_parole_Ja            = 100 * sum(parole_Ja_wtd_kt, na.rm = TRUE),
+    kt_parole_Keine         = 100 * sum(parole_Keine_wtd_kt, na.rm = TRUE),
     
-    gemeinde_parole_Nein    = sum(parole_Nein_wtd_gem, na.rm = TRUE),
-    gemeinde_parole_Ja      = sum(parole_Ja_wtd_gem, na.rm = TRUE),
-    gemeinde_parole_Keine   = sum(parole_Keine_wtd_gem, na.rm = TRUE),
+    gemeinde_parole_Nein    = 100 * sum(parole_Nein_wtd_gem, na.rm = TRUE),
+    gemeinde_parole_Ja      = 100 * sum(parole_Ja_wtd_gem, na.rm = TRUE),
+    gemeinde_parole_Keine   = 100 * sum(parole_Keine_wtd_gem, na.rm = TRUE),
     .groups = "drop")
+
+# Kontrolle:  Summen = 100 ?
+voting_5y_long_strength_wtd_summary %>%
+  mutate(parole_sum = 
+           state_parole_Nein + state_parole_Ja + state_parole_Keine) %>%
+  select(anr, year, parole_sum) %>% 
+  arrange(desc(parole_sum))
 
 
 #TODO: Clean-up "voting" tabellen
-
 
 ```
 
@@ -1416,6 +1595,8 @@ voting_5y_long_strength_wtd_summary <- voting_5y_long_strength_wtd %>%
 ###HIER WEITERARBEITEN - Felder selektionieren
  
 voting_5y_long_strength_wtd_summary
+
+write_xlsx(voting_5y_long_strength_wtd_summary, "tmp_voting_5y_long_strength_wtd_summary.xlsx")
 
   # select("anr",
   #        "year",
@@ -1550,49 +1731,49 @@ parties_rating <- read_excel("data/parties_economic_socio-political_rating.xlsx"
 
 ### Parteinamen
 
-Die verschiedenen Quellen verwenden teils unteschiedliche Parteibezeichnungen. Zur Vereinheitlichung wird deshalb initial eine Lookup Tabelle gebildet.
+Die verschiedenen Quellen verwenden teils unterschiedliche Parteibezeichnungen. Zur Vereinheitlichung wird deshalb initial eine Lookup Tabelle gebildet.
 
 ```{r}
 #| label: load_parties
 
-# National- und Ständerat
-print(lookup_elec_nr_sr_combined_parties_label %>%
-        distinct(),
-      n = 3)
-
-# Kantonale Regierung
-print(lookup_kantonale_regierung_parties_label %>%
-        distinct(),
-      n = 3)
-
-# Gemeinde Exekutiven
-print(lookup_gemeinde_exekutiven_parties_label %>%
-        distinct(),
-      n = 3)
-
-# Abstimmungen
-print(lookup_input_party_label_vote %>%
-        distinct(),
-      n = 3)
-
-
-# Alle Dataframes zu einem zusammenführen, Duplikate entfernen und Master joinen
-lookup_all_parties <- bind_rows(
-  lookup_elec_nr_sr_combined_parties_label,
-  lookup_kantonale_regierung_parties_label,
-  lookup_gemeinde_exekutiven_parties_label,
-  lookup_input_party_label_vote)%>%
-  distinct() %>% 
-  left_join(lookups_codebook_parties %>%
-              select(short_name,
-                     Partei,
-                     Parteiname),
-            by = "short_name") %>%
-  select(Partei,
-         Parteiname,
-         everything())
-
-write_xlsx(lookup_all_parties, "lookup_all.xlsx")
+# # National- und Ständerat
+# print(lookup_elec_nr_sr_combined_parties_label %>%
+#         distinct(),
+#       n = 3)
+# 
+# # Kantonale Regierung
+# print(lookup_kantonale_regierung_parties_label %>%
+#         distinct(),
+#       n = 3)
+# 
+# # Gemeinde Exekutiven
+# print(lookup_gemeinde_exekutiven_parties_label %>%
+#         distinct(),
+#       n = 3)
+# 
+# # Abstimmungen
+# print(lookup_input_party_label_vote %>%
+#         distinct(),
+#       n = 3)
+# 
+# 
+# # Alle Dataframes zu einem zusammenführen, Duplikate entfernen und Master joinen
+# lookup_all_parties <- bind_rows(
+#   lookup_elec_nr_sr_combined_parties_label,
+#   lookup_kantonale_regierung_parties_label,
+#   lookup_gemeinde_exekutiven_parties_label,
+#   lookup_input_party_label_vote)%>%
+#   distinct() %>% 
+#   left_join(lookups_codebook_parties %>%
+#               select(short_name,
+#                      Partei,
+#                      Parteiname),
+#             by = "short_name") %>%
+#   select(Partei,
+#          Parteiname,
+#          everything())
+# 
+# write_xlsx(lookup_all_parties, "lookup_all.xlsx")
 ```
 
 # Transformation & visualization
