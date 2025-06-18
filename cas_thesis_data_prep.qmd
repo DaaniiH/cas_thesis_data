@@ -1473,34 +1473,129 @@ voting_5y_long_strength_wtd_summary %>%
 ```{r}
 #| label: add_initial_columns_again
 
+
 # Vorerst ignorierte Spalten (partiell) wieder hinzufügen
 voting_5y_final <- voting_5y_long_strength_wtd_summary %>%
   left_join(voting_5y_long %>%
               select(anr,
                      titel_kurz_d,
-                     dep,
+                     dep,              # 1 Eidg. Dep. für ausw. Angel. (EDA)
+                                       # 2 Eidg. Dep. des Innern (EDI)2
+                                       # 3 Eidg. Justiz- und PolizeiDep. (EJPD)3
+                                       # 4 Eidg. Dep. für Verteidigung,                                                      Bevölkerungsschutz und Sport (VBS)4
+                                       # 5 Eidg. FinanzDep. (EFD)5
+                                       # 6 Eidg. Dep. für Wirtschaft, Bildung und
+                                       # Forschung (WBF)6
+                                       # 7 Eidg. Dep. für Umwelt, Verkehr, Energie                                            und Kommunikation (UVEK)7
+                                       # 8 Schweizerische Bundeskanzlei (BK)
                      rechtsform,       #1 Obligatorisches Referendum
                                        #2 Fakultatives Referendum
                                        #3 Volksinitiative
                                        #4 Direkter Gegenentwurf zu Volksinitiative
                                        #5 Stichfrage
-                     'inserate-total',
-                     'inserate-je-ausgabe',
-                     'inserate-ja',
-                     'inserate-jaanteil',
-                     'inserate-nein',
-                     'inserate-neutral',
-                     'mediares-tot',
-                     'mediaton-tot',
+                     inserate_total      = `inserate-total`,
+                     inserate_je_ausgabe = `inserate-je-ausgabe`,
+                     inserate_ja         = `inserate-ja`,
+                     #inserate_jaanteil   = `inserate-jaanteil`,
+                     inserate_nein       = `inserate-nein`,
+                     inserate_neutral    = `inserate-neutral`,
+                     mediares_tot        = `mediares-tot`,
+                     mediaton_tot        = `mediaton-tot`,
                      bet,
                      leer,
                      ungultig,
-                     gultig) %>%
+                     gultig,
+                     volkja_proz        = `volkja-proz`) %>%
               distinct(),
             by = "anr")
 
 # Zeilenzahl prüfen
 nrow(voting_5y_final) == nrow(voting_5y_long_strength_wtd_summary)
+
+```
+
+#### Spaltenklassifizierung und Levels
+
+```{r}
+
+str(voting_5y_final)
+
+voting_5y_final <- voting_5y_final %>%
+  mutate(annahme                = as.numeric(annahme),
+         dep                    = as.factor(rechtsform),
+         # Factor definieren
+         rechtsform             = as.factor(rechtsform),
+         # Factor definieren
+         inserate_total         = as.numeric(inserate_total),
+         inserate_je_ausgabe    = as.numeric(inserate_je_ausgabe),
+         inserate_ja            = as.numeric(inserate_ja),
+         inserate_nein          = as.numeric(inserate_nein),
+         inserate_neutral       = as.numeric(inserate_neutral),
+         inserate_ja_pct        = as.numeric(inserate_ja),
+         inserate_nein_pct      = as.numeric(inserate_nein),
+         inserate_neutral_pct   = as.numeric(inserate_neutral),
+         mediares_tot           = as.numeric(mediares_tot),
+         mediaton_tot           = as.numeric(mediaton_tot),
+         bet                    = as.numeric(bet),
+         leer                   = as.numeric(leer),
+         ungultig               = as.numeric(ungultig),
+         gultig                 = as.numeric(gultig))
+
+str(voting_5y_final)
+```
+
+#### Spalten hinzufügen (berechnet)
+
+```{r}
+
+# (Alle) Inserate-Anteile in Prozent
+voting_5y_final <- voting_5y_final %>%
+  mutate(inserate_ja_pct = 100 * inserate_ja / inserate_total,
+         inserate_nein_pct = 100 * inserate_nein / inserate_total,
+         inserate_neutral_pct = 100 * inserate_neutral / inserate_total)
+
+```
+
+Function: "Klassenmutation" Codeblock schreiben
+
+```{r}
+    
+
+df_name <- "voting_5y_final"
+
+# Funktion: Erzeugt den Mutate-Block
+generate_codeblock_4_type_conversion <- function(df, df_name = "df") {
+  # Spaltennamen und deren aktuelle Klassen holen
+  col_names <- names(df)
+  col_classes <- sapply(df, class)
+  
+  # Länge des längsten Spaltennamens
+  max_len <- max(nchar(col_names))
+  
+  # Erzeuge ästhetische Codezeilen
+  code_lines <- purrr::map2_chr(
+    col_names, col_classes,
+    function(col, col_class) {
+      padding <- strrep(" ",
+                        max_len - nchar(col))
+      paste0("    ", col, padding, " = as.", col_class, "(", col, ")")
+    }
+  )
+  
+  # Ganze mutate()-Struktur zusammensetzen
+  cat(paste0(
+    df_name, " <- ", df_name, " %>%\n",
+    "  mutate(\n",
+    paste(code_lines, collapse = ",\n"),
+    "\n  )\n"
+  ))
+}
+
+# Function ausführen
+# df-Namen angeben für 1) Spaltenherkunft und 2) neues df im Codeblock
+generate_codeblock_4_type_conversion(voting_5y_final,
+                                     "voting_5y_final")
+
 ```
 
 ## Analysen
@@ -1511,7 +1606,6 @@ nrow(voting_5y_final) == nrow(voting_5y_long_strength_wtd_summary)
 
 ```{r}
 
-
 #relevante Spalten in numerisch umwandeln
 voting_5y_final <- voting_5y_final %>%
   mutate(annahme = as.numeric(annahme),
@@ -1519,6 +1613,9 @@ voting_5y_final <- voting_5y_final %>%
          kt_parole_Ja = as.numeric(kt_parole_Ja),
          gemeinde_parole_Ja = as.numeric(gemeinde_parole_Ja))
 
+
+
+##################################
 ##################################
 #### ANGENOMMEN
 # Angenommene Abstimmungen
@@ -1538,6 +1635,7 @@ angenommen_ohne_ja_parole_50 <- angenommen %>%
   select(anr,
          titel_kurz_d,
          annahme,
+         volkja_proz,
          state_parole_Ja,
          kt_parole_Ja,
          gemeinde_parole_Ja)
@@ -1545,6 +1643,8 @@ angenommen_ohne_ja_parole_50 <- angenommen %>%
 print(angenommen_ohne_ja_parole_50)
 
 
+
+##################################
 ##################################
 #### ABGELEHNT
 # Abgelehnte Abstimmungen
@@ -1563,6 +1663,7 @@ abgelehnt_ohne_nein_parole_50 <- abgelehnt %>%
   select(anr,
          titel_kurz_d,
          annahme,
+         volkja_proz,
          state_parole_Nein,
          kt_parole_Nein,
          gemeinde_parole_Nein)
@@ -1574,6 +1675,7 @@ print(abgelehnt_ohne_nein_parole_50)
 
 ```{r}
 
+##################################
 ##################################
 #### ANGENOMMEN
 # Daten filtern und Bedingung setzen
@@ -1632,6 +1734,8 @@ ggplot(df_long,
                                    hjust = 1))
 
 
+
+##################################
 ##################################
 #### ABGELEHNT
 # Daten filtern und Bedingung setzen
@@ -1711,7 +1815,6 @@ paradoxe_faelle <- voting_5y_final %>%
   select(anr, titel_kurz_d, annahme, state_parole_Ja, kt_parole_Ja, gemeinde_parole_Ja)
 
 
-
 # a) Einzelne Korrelationen
 # Du kannst die Korrelation (z.B. Pearson) zwischen den Parolen-Anteilen und dem Abstimmungsausgang berechnen. Da annahme binär ist, empfiehlt sich auch eine logistische Regression (siehe unten)
 
@@ -1748,7 +1851,6 @@ ggplot(voting_5y_final, aes(x=state_parole_Ja, y=annahme_num)) +
 # Paradoxe Fälle geben Hinweise auf Sonderfälle, bei denen andere Faktoren eine Rolle spielen könnten (z.B. Medienkampagnen, Inserate, etc.).
 
 
-
 ########### Erweitertes Modell
 
 # Annahme als numerisch (0/1)
@@ -1756,14 +1858,12 @@ voting_5y_final$annahme_num <- as.numeric(voting_5y_final$annahme)
 
 # Umwandlung der relevanten Variablen in numerisch
 voting_5y_final <- voting_5y_final %>%
-  mutate_at(vars(
-    inserate_total = 'inserate-total',
-    inserate_ja = 'inserate-ja',
-    inserate_nein = 'inserate-nein',
-    inserate_neutral = 'inserate-neutral',
-    mediares_tot = 'mediares-tot',
-    mediaton_tot = 'mediaton-tot'
-  ), as.numeric)
+  mutate(across(c(inserate_total,
+                  inserate_ja,
+                  inserate_nein,
+                  inserate_neutral,
+                  mediares_tot,
+                  mediaton_tot), as.numeric))
 
 # Modellformel
 modell <- glm(
@@ -1774,6 +1874,181 @@ modell <- glm(
   family = binomial)
 summary(modell)
 ```
+
+Korrelationsmatrix
+
+```{r}
+
+library(tidyverse)
+library(ggplot2)
+library(corrplot)
+library(GGally)
+
+
+
+
+####
+####Interpretieren!
+####
+
+# a) Für den Zeitraum 2019–2025 (alle Variablen, die bis 2025 verfügbar sind):
+df_2019_2025 <- voting_5y_final %>%
+  filter(year >= 2019 & year <= 2025)
+
+# b) Für den Zeitraum 2019–2023 (nur Variablen, die bis 2023 verfügbar sind):
+df_2019_2023 <- voting_5y_final %>%
+  filter(year >= 2019 & year <= 2023)
+
+
+# 3. Korrelation zwischen tatsächlichem Ergebnis und Parolen
+# a) Korrelation berechnen
+
+# Nur relevante Spalten auswählen
+cor_data <- df_2019_2025 %>%
+  mutate(inserate_ja_pct = 100 * inserate_ja / inserate_total,
+         inserate_nein_pct = 100 * inserate_nein / inserate_total,
+         inserate_neutral_pct = 100 * inserate_neutral / inserate_total) %>%
+  select(volkja_proz,
+         state_parole_Ja,
+         kt_parole_Ja,
+         gemeinde_parole_Ja,
+         inserate_total,
+         inserate_jaanteil,
+         inserate_ja_pct,
+         inserate_neutral,
+         inserate_neutral_pct,
+         inserate_nein,
+         inserate_nein_pct,
+         mediares_tot,
+         mediaton_tot)
+  
+# Korrelationsmatrix berechnen
+cor_matrix <- cor(cor_data, use = "pairwise.complete.obs")
+print(cor_matrix)
+
+# b) Visualisierung der Korrelation
+corrplot(cor_matrix, method = "number", type = "upper")
+
+####
+####Interpretieren!
+####
+
+
+
+
+
+
+
+#c) Scatterplots zur Visualisierung
+# Scatterplot für jede Ebene
+ggplot(df_2019_2025, aes(x = state_parole_Ja, y = volkja_proz)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  labs(title = "Tatsächliche vs. erwartete Ja-Stimmen (Staatsebene)")
+
+ggplot(df_2019_2025, aes(x = kt_parole_Ja, y = volkja_proz)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  labs(title = "Tatsächliche vs. erwartete Ja-Stimmen (Kantonsebene)")
+
+ggplot(df_2019_2025, aes(x = gemeinde_parole_Ja, y = volkja_proz)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  labs(title = "Tatsächliche vs. erwartete Ja-Stimmen (Gemeindeebene)")
+
+
+# 
+# Interpretation von Scatterplots mit Trendlinie
+# 1. Trendlinie betrachten
+# 
+# Eine ansteigende Trendlinie von links unten nach rechts oben zeigt einen positiven Zusammenhang: Je mehr Parteien auf einer Ebene die Ja-Parole ausgeben, desto höher ist tendenziell der tatsächliche Ja-Stimmenanteil (volkja_proz).
+# 
+# Eine abfallende Trendlinie würde auf einen negativen Zusammenhang hindeuten (was hier nicht zu erwarten ist).
+# 
+# Ist die Trendlinie flach oder kaum erkennbar, besteht kein oder nur ein sehr schwacher Zusammenhang zwischen den Variablen.
+# 
+# 2. Streuung der Punkte
+# 
+# Liegen die Punkte nah an der Trendlinie, ist der Zusammenhang stark und die Parolen sind ein guter Prädiktor für das Abstimmungsergebnis.
+# 
+# Sind die Punkte weit gestreut, ist der Zusammenhang schwächer und andere Faktoren spielen eine größere Rolle.
+# 
+# 3. Ausreißer identifizieren
+# 
+# Einzelne Punkte, die weit von der Trendlinie entfernt liegen, sind Ausreißer. Sie können auf spezielle Abstimmungen oder außergewöhnliche Umstände hinweisen und sollten ggf. genauer untersucht werden.
+# 
+# 4. Quadrantenanalyse (optional)
+# 
+# Du kannst das Scatterplot in vier Quadranten einteilen, um Cluster zu identifizieren, z.B. Abstimmungen mit wenig Parolenunterstützung und wenig Ja-Stimmen (links unten) oder viel Parolenunterstützung und viele Ja-Stimmen (rechts oben).
+# 
+# Was bedeutet das für deine Analyse?
+# Eine deutliche, ansteigende Trendlinie in deinen Scatterplots bestätigt, dass die Parolen (egal ob auf Staats-, Kantons- oder Gemeindeebene) einen positiven Einfluss auf das tatsächliche Abstimmungsergebnis haben.
+# 
+# Die Steilheit der Trendlinie und die Nähe der Punkte zur Linie geben Aufschluss über die Stärke dieses Einflusses: Je steiler und enger, desto stärker der Zusammenhang.
+# 
+# Die Scatterplots helfen dir, schnell zu erkennen, ob und wie stark die Parolen mit dem Abstimmungsergebnis zusammenhängen und ob es Ausreißer gibt, die weiter untersucht werden sollten.
+# 
+# Zusammengefasst:
+# Die Scatterplots visualisieren, wie stark und in welche Richtung die Parolen auf den verschiedenen Ebenen mit dem tatsächlichen Ja-Stimmenanteil zusammenhängen. Eine klare, ansteigende Trendlinie und wenig Streuung bedeuten, dass die Parolen ein guter Prädiktor für das Ergebnis sind. Ausreißer oder starke Streuung deuten darauf hin, dass weitere Faktoren das Abstimmungsergebnis beeinflussen können.
+
+
+
+
+
+
+#################################
+
+# 4. Erweiterte Analyse: Einfluss weiterer Variablen
+# a) Korrelationsmatrix mit weiteren Variablen
+
+
+# Relevante Variablen auswählen
+cor_data_extended <- df_2019_2025 %>%
+  select(volkja_proz, state_parole_Ja, kt_parole_Ja, gemeinde_parole_Ja,
+         dep, rechtsform, bet, inserate_total, inserate_ja, inserate_nein,
+         inserate_neutral, mediares_tot, mediaton_tot)
+
+str(cor_data_extended)
+# Nur numerische Variablen für die Korrelation
+cor_data_numeric <- cor_data_extended %>% select(where(is.numeric))
+cor_matrix_ext <- cor(cor_data_numeric, use = "pairwise.complete.obs")
+str(cor_data_numeric)
+corrplot(cor_matrix_ext, method = "color", type = "upper")
+
+
+#b) Paarweise Scatterplots (optional, für mehr Übersicht)
+# Nur ein paar ausgewählte Variablen für Übersichtlichkeit
+GGally::ggpairs(cor_data_numeric[, 1:5])
+
+
+
+#5. Lineare Regression: Welche Faktoren beeinflussen das Abstimmungsergebnis?
+# Einfaches Modell mit Parolen
+model1 <- lm(volkja_proz ~ state_parole_Ja + kt_parole_Ja + gemeinde_parole_Ja, data = df_2019_2025)
+summary(model1)
+
+# Erweitertes Modell mit weiteren Variablen
+model2 <- lm(volkja_proz ~ state_parole_Ja + kt_parole_Ja + gemeinde_parole_Ja +
+               dep + rechtsform + bet + inserate_total + inserate_ja +
+               inserate_nein + inserate_neutral + mediares_tot + mediaton_tot,
+             data = df_2019_2025)
+summary(model2)
+
+
+# 6. Analyse für Zeitraum 2019–2023 (mit leer, ungültig, gültig)
+# Modell mit zusätzlichen Variablen
+model3 <- lm(volkja_proz ~ state_parole_Ja + kt_parole_Ja + gemeinde_parole_Ja +
+               dep + rechtsform + bet + inserate_total + inserate_ja +
+               inserate_nein + inserate_neutral + mediares_tot + mediaton_tot +
+               leer + ungultig + gultig,
+             data = df_2019_2023)
+summary(model3)
+
+
+
+```
+
+## s
 
 ## Visualization
 
