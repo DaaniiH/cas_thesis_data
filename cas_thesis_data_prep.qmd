@@ -1678,7 +1678,6 @@ angenommen_ohne_ja_parole_50 <- angenommen %>%
 print(angenommen_ohne_ja_parole_50)
 
 
-
 ##################################
 ##################################
 #### ABGELEHNT
@@ -1807,6 +1806,102 @@ ggplot(summary_stats_v2, aes(x = Parole, y = mean, fill = Parole)) +
 summary_stats_v2
 ```
 
+ANOVA-Test (diff-state only)
+
+```{r}
+
+# Gruppengröße prüfen
+voting_5y_final %>%
+  count(rechtsform)
+
+voting_5y_final %>%
+  group_by(rechtsform) %>%
+  summarise(
+    n = n(),
+    p_value = if (n() >= 3) shapiro.test(diff_state)$p.value else NA
+  )
+
+# Boxplot zur visuellen Prüfung
+ggplot(voting_5y_final, aes(x = rechtsform, y = diff_state)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "Abweichung diff_state nach Rechtsform",
+       x = "Rechtsform", y = "diff_state")
+
+# Normalverteilung je Gruppe prüfen (Shapiro-Wilk)
+voting_5y_final %>% 
+  filter(rechtsform != "Obligatorisches Referendum") %>% 
+  group_by(rechtsform) %>% 
+  summarise(p_value = shapiro.test(diff_state)$p.value)
+
+
+# Einfaktorielle ANOVA
+anova_model <- aov(diff_state ~ rechtsform, data = voting_5y_final)
+summary(anova_model)
+
+
+#  Wenn Pr(>F) < 0.05, ist der Unterschied signifikant → Rechtsform beeinflusst diff_state.
+
+TukeyHSD(anova_model)
+
+
+```
+
+ANOVA Test alle Ebenen
+
+HIER NOCH WEITERARBEITEN / ABSCHLIESSSEN, DANN KORRELATION UND REGRESSION
+
+```{r}
+# 1. Gruppengröße prüfen
+voting_5y_final %>%
+  count(rechtsform)
+
+# 2. Shapiro-Wilk-Test für alle 3 diff-Variablen
+normality_tests <- voting_5y_final %>%
+  group_by(rechtsform) %>%
+  summarise(
+    n = n(),
+    p_diff_state = if (n >= 3) shapiro.test(diff_state)$p.value else NA,
+    p_diff_kanton = if (n >= 3) shapiro.test(diff_kanton)$p.value else NA,
+    p_diff_gemeinde = if (n >= 3) shapiro.test(diff_gemeinde)$p.value else NA
+  )
+
+print(normality_tests)
+
+# 3. Boxplots zur visuellen Prüfung
+for (var in c("diff_state", "diff_kanton", "diff_gemeinde")) {
+  ggplot(voting_5y_final, aes(x = rechtsform, y = .data[[var]])) +
+    geom_boxplot() +
+    theme_minimal() +
+    labs(
+      title = paste("Abweichung", var, "nach Rechtsform"),
+      x = "Rechtsform",
+      y = var
+    ) +
+    print()
+}
+
+# 4. ANOVA + Tukey für alle 3 diff-Variablen
+for (var in c("diff_state", "diff_kanton", "diff_gemeinde")) {
+  cat("\n==============================\n")
+  cat("ANOVA für:", var, "\n")
+  cat("==============================\n")
+  
+  formula <- as.formula(paste(var, "~ rechtsform"))
+  model <- aov(formula, data = voting_5y_final)
+  print(summary(model))
+  
+  # Wenn signifikant, Tukey-HSD
+  p_value <- summary(model)[[1]][["Pr(>F)"]][1]
+  if (!is.na(p_value) && p_value < 0.05) {
+    cat("\n→ Signifikanter Unterschied gefunden. Tukey-HSD-Test:\n")
+    print(TukeyHSD(model))
+  } else {
+    cat("\n→ Kein signifikanter Unterschied. Kein Tukey-Test notwendig.\n")
+  }
+}
+```
+
 #### Tables (Word)
 
 ```{r}
@@ -1838,7 +1933,7 @@ df3 <- head(summary_stats_v1)
 ft3 <- format_table(df3)
 
 # Tabelle 4: VARIANZ Gruppiert nach Rechtsform
-df4 <- head(summary_stats_v1)
+df4 <- head(summary_stats_v2)
 ft4 <- format_table(df4)
 
 
@@ -1869,11 +1964,7 @@ doc <- body_add_flextable(doc,
                           ft4)
 
 # Speichern 
-print(doc, target = "result/Annahme_und_Ablehnung_entgegen_Parolen.docx")
-```
-
-```{r}
-
+print(doc, target = "result/Annahme_Ablehnung_Varianz.docx")
 ```
 
 #### Plots
@@ -1995,6 +2086,13 @@ ggplot(df_negativ_long,
   theme(axis.text.x = element_text(angle = 45,
                                    hjust = 1))
 ```
+
+```{r}
+
+
+```
+
+HIER WEITERARBEITEN - Korrelation!!
 
 ob und wie stark die Parolen der Parteien (auf Staats-, Kantons- und Gemeindeebene) mit dem Abstimmungsausgang zusammenhängen – insbesondere in Fällen, wo die Ja-Parole unter 50 % liegt, die Vorlage aber trotzdem angenommen wird (und umgekehrt).
 
