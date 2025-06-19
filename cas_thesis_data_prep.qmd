@@ -36,6 +36,8 @@ library(purrr)
 
 library(writexl)  # Write Excel files
 
+library(flextable) # Tables for Word
+library(officer)   # Tables for Word
 
 library(tidyr)
 library(tidyverse)
@@ -1631,7 +1633,6 @@ generate_codeblock_4_type_conversion(voting_5y_final,
 
 ```{r}
 
-
 #TODO: Umwandlung obsolet?!
 #relevante Spalten in numerisch umwandeln
 voting_5y_final <- voting_5y_final %>%
@@ -1695,6 +1696,49 @@ abgelehnt_ohne_nein_parole_50 <- abgelehnt %>%
          gemeinde_parole_Nein)
 
 print(abgelehnt_ohne_nein_parole_50)
+```
+
+#### Tables for Word
+
+```{r}
+
+# Funktion für identische Formatierung
+format_table <- function(df) {
+  df[[1]] <- as.character(df[[1]])
+  ft <- flextable(df)
+  ft <- theme_vanilla(ft)
+  ft <- font(ft, fontname = "Courier New", part = "all")
+  ft <- fontsize(ft, size = 8, part = "all")
+  ft <- colformat_double(ft, digits = 2)
+  ft <- colformat_double(ft, digits = 1, suffix = "%")
+  ft <- width(ft, j = 2, width = 2)
+  return(ft)
+}
+
+# Tabelle 1: ANGENOMMEN
+df1 <- head(angenommen_ohne_ja_parole_50)
+ft1 <- format_table(df1)
+
+# Tabelle 2: ABGELEHNT
+df2 <- head(abgelehnt_ohne_nein_parole_50)
+ft2 <- format_table(df2)
+
+# Word-Dokument erstellen und beide Tabellen einfügen ---
+doc <- read_docx()
+doc <- body_add_par(doc,
+                    "Annahme trotz fehlender Unterstützung durch Parolen",
+                    style = "heading 1")
+doc <- body_add_flextable(doc,
+                          ft1)
+doc <- body_add_par(doc, "") # Leerzeile
+doc <- body_add_par(doc,
+                    "Ablehnung trotz fehlender Unterstützung durch Parolen",
+                    style = "heading 1")
+doc <- body_add_flextable(doc,
+                          ft2)
+
+# Speichern 
+print(doc, target = "result/Annahme_und_Ablehnung_entgegen_Parolen.docx")
 ```
 
 #### Plots
@@ -1835,13 +1879,13 @@ ob und wie stark die Parolen der Parteien (auf Staats-, Kantons- und Gemeindeebe
 # Annahme == 0, aber state_parole_Ja >= 50 (und/oder die anderen Ebenen)
 
 # Annahme als numerisch
-voting_5y_final$annahme_num <- as.numeric(voting_5y_final$annahme)
+voting_5y_final$annahme <- as.numeric(voting_5y_final$annahme)
 
 # Fälle identifizieren
 paradoxe_faelle <- voting_5y_final %>%
   filter(
-    (annahme_num == 1 & (state_parole_Ja < 50 | kt_parole_Ja < 50 | gemeinde_parole_Ja < 50)) |
-    (annahme_num == 0 & (state_parole_Ja >= 50 | kt_parole_Ja >= 50 | gemeinde_parole_Ja >= 50))
+    (annahme == 1 & (state_parole_Ja < 50 | kt_parole_Ja < 50 | gemeinde_parole_Ja < 50)) |
+    (annahme == 0 & (state_parole_Ja >= 50 | kt_parole_Ja >= 50 | gemeinde_parole_Ja >= 50))
   ) %>%
   select(anr, titel_kurz_d, annahme, state_parole_Ja, kt_parole_Ja, gemeinde_parole_Ja)
 
@@ -1849,15 +1893,15 @@ paradoxe_faelle <- voting_5y_final %>%
 # a) Einzelne Korrelationen
 # Du kannst die Korrelation (z.B. Pearson) zwischen den Parolen-Anteilen und dem Abstimmungsausgang berechnen. Da annahme binär ist, empfiehlt sich auch eine logistische Regression (siehe unten)
 
-cor.test(voting_5y_final$state_parole_Ja, voting_5y_final$annahme_num)
-cor.test(voting_5y_final$kt_parole_Ja, voting_5y_final$annahme_num)
-cor.test(voting_5y_final$gemeinde_parole_Ja, voting_5y_final$annahme_num)
+cor.test(voting_5y_final$state_parole_Ja, voting_5y_final$annahme)
+cor.test(voting_5y_final$kt_parole_Ja, voting_5y_final$annahme)
+cor.test(voting_5y_final$gemeinde_parole_Ja, voting_5y_final$annahme)
 
 
 # b) Kombinationen prüfen (multivariat)
 # Eine logistische Regression zeigt dir, wie stark die einzelnen Parolen-Anteile (auch gemeinsam) den Ausgang vorhersagen:
 
-modell <- glm(annahme_num ~ state_parole_Ja + kt_parole_Ja + gemeinde_parole_Ja, 
+modell <- glm(annahme ~ state_parole_Ja + kt_parole_Ja + gemeinde_parole_Ja, 
               data = voting_5y_final, family = binomial)
 summary(modell)
 # Die Estimate-Werte zeigen, wie stark ein Prozentpunkt mehr Ja-Parole die Annahmewahrscheinlichkeit beeinflusst.
@@ -1868,7 +1912,7 @@ summary(modell)
 
 
 #Scatterplot
-ggplot(voting_5y_final, aes(x=state_parole_Ja, y=annahme_num)) +
+ggplot(voting_5y_final, aes(x=state_parole_Ja, y=annahme)) +
   geom_jitter(height=0.05, width=0) +
   geom_smooth(method="glm", method.args=list(family="binomial"), se=FALSE) +
   labs(title="Zusammenhang State-Parole Ja und Annahme")
@@ -1885,7 +1929,7 @@ ggplot(voting_5y_final, aes(x=state_parole_Ja, y=annahme_num)) +
 ########### Erweitertes Modell
 
 # Annahme als numerisch (0/1)
-voting_5y_final$annahme_num <- as.numeric(voting_5y_final$annahme)
+voting_5y_final$annahme <- as.numeric(voting_5y_final$annahme)
 
 # Umwandlung der relevanten Variablen in numerisch
 voting_5y_final <- voting_5y_final %>%
@@ -1898,7 +1942,7 @@ voting_5y_final <- voting_5y_final %>%
 
 # Modellformel
 modell <- glm(
-  annahme_num ~ state_parole_Ja + kt_parole_Ja + gemeinde_parole_Ja +
+  annahme ~ state_parole_Ja + kt_parole_Ja + gemeinde_parole_Ja +
     dep + rechtsform + inserate_total + inserate_ja + inserate_nein +
     inserate_neutral + mediares_tot + mediaton_tot,
   data = voting_5y_final,
@@ -1906,7 +1950,28 @@ modell <- glm(
 summary(modell)
 ```
 
-### Korrelationsmatrix 
+### Daten für Korrelationsmatrix und Regressionsmodell
+
+```{r}
+
+str(voting_5y_final)
+
+# Fehelende Werte/NA zeigen
+Abstract(voting_5y_final)
+
+# Variablen "Inserate.." sowie "leer", "ungültig" und "gultig" nur bis Ende 2023 
+
+# a) Zeitraum 2019–2025 (nicht alle Variablen über gesammten Zeitraum verfügbar)
+df_2019_2025 <- voting_5y_final %>%
+  filter(year >= 2019 & year <= 2025)
+
+# b) Zeitraum 2019-2023 (alle Variablen durchgehend verfügbar)
+df_2019_2023 <- voting_5y_final %>%
+  filter(year >= 2019 & year <= 2023)
+
+```
+
+### Korrelationsmatrix (GUT!)
 
 ```{r}
 
@@ -1915,32 +1980,11 @@ summary(modell)
 #### Verwendung von Volkja_proz
 ####
 
-
-# Fehelende Werte/NA zeigen
-Abstract(voting_5y_final)
-
-# Variablen "Inserate.." sowie "leer", "ungültig" und "gultig" nur bis Ende 2023 
-
-# a) Zeitraum 2019–2025 (Variablen zu reduziere)
-df_2019_2025 <- voting_5y_final %>%
-  filter(year >= 2019 & year <= 2025)
-
-# b) Zeitraum 2019-2023 (alle Variablen)
-df_2019_2023 <- voting_5y_final %>%
-  filter(year >= 2019 & year <= 2023)
-
-
-# 3. Korrelation zwischen tatsächlichem Ergebnis und Parolen
-# a) Korrelation berechnen
-
-
-
+# Korrelation zwischen tatsächlichem Ergebnis und Parolen
+# Korrelation berechnen
 
 # Nur relevante Spalten auswählen
 cor_data <- df_2019_2025 %>%
-  mutate(inserate_ja_pct = 100 * inserate_ja / inserate_total,
-         inserate_nein_pct = 100 * inserate_nein / inserate_total,
-         inserate_neutral_pct = 100 * inserate_neutral / inserate_total) %>%
   select(#annahme,            # für logistische Regression
          volkja_proz,         # für Korrelationsanalysen, da kontinuierlich.
          state_parole_Ja,     # Prozente
@@ -1969,7 +2013,7 @@ str(cor_data)
 cor_matrix <- cor(cor_data, use = "pairwise.complete.obs")
 print(cor_matrix)
 
-# b) Visualisierung der Korrelation
+# Visualisierung der Korrelation
 corrplot(cor_matrix, method = "number", type = "upper")
 
 ####
@@ -2061,33 +2105,154 @@ GGally::ggpairs(cor_data_numeric[, 1:10])
 
 
 
-#5. Lineare Regression: Welche Faktoren beeinflussen das Abstimmungsergebnis?
-# Einfaches Modell mit Parolen
-model1 <- lm(annahme ~ state_parole_Ja + kt_parole_Ja + gemeinde_parole_Ja, data = df_2019_2025)
-summary(model1)
+```
 
-# Erweitertes Modell mit weiteren Variablen
-model2 <- lm(annahme ~ state_parole_Ja + kt_parole_Ja + gemeinde_parole_Ja +
-               dep + rechtsform + bet + inserate_total + inserate_ja +
-               inserate_nein + inserate_neutral + mediares_tot + mediaton_tot,
-             data = df_2019_2025)
-summary(model2)
+### Regression
+
+-   Die lineare Regression zeigt feine Unterschiede im Ja-Anteil.
+
+-   Die logistische Regression zeigt, was wirklich den Ausschlag für Annahme/Ablehnung gibt.
+
+#### Regresssion - Lineares Modell
+
+```{r}
+
+# Zielvariable: "volkja_proz" (Prozentsatz der Ja-Stimmen, metrisch)
+# 
+# Regressionstyp: Lineare Regression (lm)
+# 
+# Vorteile:
+# - volle Information (wie hoch ist die Zustimmung in Prozent?).
+# - auch kleine Unterschiede zwischen den Abstimmungen analysieren.
+# 
+# Fragestellung:
+# - Wie stark beeinflussen Inserate, Medienresonanz, etc. den Ja-Anteil?
+# 
+# Interpretation:
+# - Effekt zeigt, wie viele Prozentpunkte sich die Ja-Stimmen bei Änderung der Prädiktoren verändern. e.g. "Ein Anstieg der Ja-Inserate um 10% erhöht den Ja-Stimmen-ANTEIL um 1,5 Prozentpunkte."
 
 
-# 6. Analyse für Zeitraum 2019–2023 (mit leer, ungültig, gültig)
-# Modell mit zusätzlichen Variablen
-model3 <- lm(volkja_proz ~ state_parole_Ja + kt_parole_Ja + gemeinde_parole_Ja +
-               dep + rechtsform + bet + inserate_total + inserate_ja +
-               inserate_nein + inserate_neutral + mediares_tot + mediaton_tot +
-               leer + ungultig + gultig,
-             data = df_2019_2023)
-summary(model3)
+
+
+
+
+  ##############################################
+  # Formel bauen
+  # Alle Spaltennamen anzeigen
+  names(voting_5y_final)
+  str(voting_5y_final)
+  
+  # Zielvariable und auszuschließende Variablen
+  target <- "volkja_proz"
+  exclude <- c("annahme", "titel_kurz_d", "anr", "year")
+  
+  # Prädiktoren bestimmen
+  predictors <- setdiff(names(voting_5y_final), c(target, exclude))
+  
+  # Formel als Text zusammenbauen
+  formel_text <- paste(target, "~", paste(predictors, collapse = " + "))
+  cat(formel_text)
+  ##############################################
+
+
+
+##############################################
+# Prädiktorenauswahl aüf Lineares Modell
+# Alle Variablen ausser
+# - Zielvariable (volkja_proz) und
+# - nicht-numerische ("annahme" & "titel")
+
+full_model_lm <- lm(volkja_proz ~ . - annahme - titel_kurz_d,
+                    data = voting_5y_final)
+
+
+step_model_lm <- step(full_model_lm, direction = "both")
+
+summary(step_model_lm)
+
+
+par(mfrow = c(2, 2))   # 2x2-Layout für vier Plots
+plot(step_model_lm)
+par(mfrow = c(1, 1))
+
+library(effects)
+plot(allEffects(step_model_lm))
+
+plot(voting_5y_final$mediares_tot, voting_5y_final$volkja_proz,
+     xlab = "Medienresonanz", ylab = "Ja-Stimmen-Anteil (%)")
+abline(lm(volkja_proz ~ mediares_tot, data = voting_5y_final), col = "red")
+
+
+
+
+# Lineares Regressionsmodell mit volkja_proz als Zielvariable
+model_lm <- lm(volkja_proz ~ inserate_ja_pct +
+                 inserate_nein_pct +
+                 bet,
+               data = voting_5y_final)
+summary(model_lm)
+
+
+model_lm <- lm(volkja_proz ~ 
+                 state_parole_Ja +
+                 kt_parole_Ja +
+                 gemeinde_parole_Ja +
+                 nrja_pct +
+                 srja_pct +
+                 inserate_ja_pct +
+                 inserate_nein_pct +
+                 inserate_total +
+                 mediaton_tot,
+               data = cor_data)
+
+# Modell zusammenfassen
+summary(model_lm)
 
 
 
 ```
 
-## s
+#### Regression - logistisches Modell
+
+```{r}
+
+# Zielvariable: "annahme" (Ja/Nein, binär: 1 = angenommen, 0 = abgelehnt)
+# Regressionstyp: Logistische Regression (glm(..., family = binomial))
+# 
+# Vorteile:
+# - welche Faktoren beinflussen die Wahrscheinlichkeit einer Annahme
+# - primär um zu schauen ob eine Vorlage angenommen/abgelehnt wurde
+# 
+#  Fragestellung:
+# - Welche Faktoren erhöhen die Chance, dass eine Vorlage angenommen wird?
+# 
+# Interpretation:
+# - Die Effekte zeigen, wie sich die Wahrscheinlichkeit der Annahme verändert. e.g. "Ein Anstieg der Ja-Inserate um 10% erhöht die WAHRSCHEINLICHKEIT einer Annahme um 20%."
+
+
+
+model_logit <- glm(annahme ~ inserate_ja_pct +
+                     inserate_nein_pct +
+                     bet,
+                   data = voting_5y_final,
+                   family = binomial)
+summary(model_logit)
+
+
+
+```
+
+#### Achtung
+
+```{r}
+
+
+# Wähle alle Variablen aus, von denen du erwartest, dass sie einen Einfluss auf deine Zielgröße haben könnten.
+# 
+# Prüfe nach der Regression, welche Prädiktoren tatsächlich signifikant sind (über die p-Werte im Output).
+# 
+# Entferne ggf. nicht-signifikante Prädiktoren, um das Modell zu vereinfachen (Prinzip der Sparsamkeit).
+```
 
 ## Visualization
 
