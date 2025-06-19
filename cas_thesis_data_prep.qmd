@@ -1536,10 +1536,18 @@ str(voting_5y_final)
 
 voting_5y_final <- voting_5y_final %>%
   mutate(annahme                = as.numeric(annahme),
-         dep                    = as.factor(rechtsform),
-         # Factor definieren
-         rechtsform             = as.factor(rechtsform),
-         # Factor definieren
+         dep                    = factor(rechtsform,
+                                         levels = c("1", "2", "3", "4",
+                                                    "5", "6", "7", "8"),
+                                         labels = c("EDA", "EDI", "EJPD", "VBS",
+                                                    "EFD", "WBF", "UVEK", "BK" )),
+         rechtsform             = factor(rechtsform,
+                                        levels = c("1","2","3","4","5"),
+                                        labels = c("Obligatorisches Referendum",
+                                                   "Fakultatives Referendum",
+                                                   "Volksinitiative",
+                                                   "Direkter Gegenentwurf",
+                                                   "Stichfrage")),
          inserate_total         = as.numeric(inserate_total),
          inserate_je_ausgabe    = as.numeric(inserate_je_ausgabe),
          inserate_ja            = as.numeric(inserate_ja),
@@ -1698,13 +1706,115 @@ abgelehnt_ohne_nein_parole_50 <- abgelehnt %>%
 print(abgelehnt_ohne_nein_parole_50)
 ```
 
-#### Tables for Word
+#### Varianz
+
+```{r}
+
+# Abweichungen berechnen
+voting_5y_final <- voting_5y_final %>%
+  mutate(diff_state = state_parole_Ja - volkja_proz,
+         diff_kanton = kt_parole_Ja - volkja_proz,
+         diff_gemeinde = gemeinde_parole_Ja - volkja_proz)
+
+# Mittelwert und Standardabweichung der Abweichungen je Parole berechnen
+summary_stats_v1 <- voting_5y_final %>%
+  summarise(mean_state = mean(diff_state),
+            sd_state = sd(diff_state),
+            mean_kanton = mean(diff_kanton),
+            sd_kanton = sd(diff_kanton),
+            mean_gemeinde = mean(diff_gemeinde),
+            sd_gemeinde = sd(diff_gemeinde)) %>%
+  pivot_longer(cols = everything(),
+               names_to = c("stat",
+                            "Parole"),
+               names_sep = "_",
+               values_to = "value") %>%
+  pivot_wider(names_from = stat,
+              values_from = value) %>% 
+  mutate(Parole = recode(Parole,
+                         "state" = "State",
+                         "kanton" = "Kanton",
+                         "gemeinde" = "Gemeinde"))
+
+# Visualisierung als Balkendiagramm mit Fehlerbalken (±1 SD)
+ggplot(summary_stats_v1,
+       aes(x = Parole,
+           y = mean,
+           fill = Parole)) +
+  geom_col(width = 0.6,
+           color = "black") +
+  geom_errorbar(aes(ymin = mean - sd,
+                    ymax = mean + sd),
+                width = 0.2) +
+  theme_minimal() +
+  labs(title = "Mittlere Abweichung der Parolen vom Volksentscheid\nmit Standardabweichung",
+       x = "Parole",
+       y = "Mittlere Abweichung (±1 SD, Prozentpunkte)") +
+  guides(fill = "none")
+
+summary_stats_v1
+```
+
+#### Varianz gruppiert nach Rechtsform
+
+```{r}
+
+# Abweichungen berechnen
+voting_5y_final <- voting_5y_final %>%
+  mutate(
+    diff_state = state_parole_Ja - volkja_proz,
+    diff_kanton = kt_parole_Ja - volkja_proz,
+    diff_gemeinde = gemeinde_parole_Ja - volkja_proz
+  )
+
+# Zusammenfassen nach "dep" gruppiert
+summary_stats_v2 <- voting_5y_final %>%
+  group_by(rechtsform) %>%
+  summarise(
+    mean_state = mean(diff_state),
+    sd_state = sd(diff_state),
+    mean_kanton = mean(diff_kanton),
+    sd_kanton = sd(diff_kanton),
+    mean_gemeinde = mean(diff_gemeinde),
+    sd_gemeinde = sd(diff_gemeinde)
+  ) %>%
+  pivot_longer(
+    cols = -rechtsform,
+    names_to = c("stat", "Parole"),
+    names_sep = "_",
+    values_to = "value"
+  ) %>%
+  pivot_wider(
+    names_from = stat,
+    values_from = value
+  ) %>%
+  mutate(Parole = recode(Parole,
+                         "state" = "State",
+                         "kanton" = "Kanton",
+                         "gemeinde" = "Gemeinde"))
+
+# Visualisierung nach "dep"-Gruppe (z.B. als Facet)
+ggplot(summary_stats_v2, aes(x = Parole, y = mean, fill = Parole)) +
+  geom_col(width = 0.6, color = "black") +
+  geom_errorbar(aes(ymin = mean - sd, ymax = mean + sd), width = 0.2) +
+  facet_wrap(~ rechtsform) +
+  theme_minimal() +
+  labs(title = "Mittlere Abweichung der Parolen vom Volksentscheid\nmit Standardabweichung nach Rechtsform",
+       x = "Parole",
+       y = "Mittlere Abweichung (±1 SD, Prozentpunkte)") +
+  guides(fill = "none")
+
+summary_stats_v2
+```
+
+#### Tables (Word)
 
 ```{r}
 
 # Funktion für identische Formatierung
 format_table <- function(df) {
   df[[1]] <- as.character(df[[1]])
+  df[[3]] <- as.character(df[[3]])
   ft <- flextable(df)
   ft <- theme_vanilla(ft)
   ft <- font(ft, fontname = "Courier New", part = "all")
@@ -1723,6 +1833,15 @@ ft1 <- format_table(df1)
 df2 <- head(abgelehnt_ohne_nein_parole_50)
 ft2 <- format_table(df2)
 
+# Tabelle 3: VARIANZ
+df3 <- head(summary_stats_v1)
+ft3 <- format_table(df3)
+
+# Tabelle 4: VARIANZ Gruppiert nach Rechtsform
+df4 <- head(summary_stats_v1)
+ft4 <- format_table(df4)
+
+
 # Word-Dokument erstellen und beide Tabellen einfügen ---
 doc <- read_docx()
 doc <- body_add_par(doc,
@@ -1736,9 +1855,25 @@ doc <- body_add_par(doc,
                     style = "heading 1")
 doc <- body_add_flextable(doc,
                           ft2)
+doc <- body_add_par(doc, "") # Leerzeile
+doc <- body_add_par(doc,
+                    "Mittlere Abweichung der Parolen vom Volksentscheid - Mit Standardabweichung",
+                    style = "heading 1")
+doc <- body_add_flextable(doc,
+                          ft3)
+doc <- body_add_par(doc, "") # Leerzeile
+doc <- body_add_par(doc,
+                    "Mittlere Abweichung der Parolen vom Volksentscheid - Mit Standardabweichung. Gruppiert nach Departement.",
+                    style = "heading 1")
+doc <- body_add_flextable(doc,
+                          ft4)
 
 # Speichern 
 print(doc, target = "result/Annahme_und_Ablehnung_entgegen_Parolen.docx")
+```
+
+```{r}
+
 ```
 
 #### Plots
