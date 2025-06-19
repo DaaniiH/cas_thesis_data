@@ -36,16 +36,19 @@ library(purrr)
 
 library(writexl)  # Write Excel files
 
-library(dplyr)
+
 library(tidyr)
 library(tidyverse)
 library(ggplot2)  # Diagrams
 library(ggforce)  # Diagrams
-library(plotly)
+library(corrplot) # Korrelation
+library(GGally)   # Diagrams / Korrelation
+library(plotly)   # Diagrams
 
 library(DT)       # datatable()
 
 library(DescTools)
+library(dplyr)    # am Schluss laden, u.a. select() greift sonst aufs falsche
 ```
 
 # Functions
@@ -229,7 +232,7 @@ make.unique(colnames(elec_ständerat))
 elec_nr_sr_combined_wide <- bind_rows(
   elec_nationalrat %>% mutate(role = "Nationalrat"),
   elec_ständerat %>% mutate(role = "Ständerat")) %>%
-  select(role, everything())
+  dplyr::select(role, everything())
 
 
 # df ins Long Format umwandeln
@@ -1310,7 +1313,7 @@ tmp_voting_long <- tmp_voting_long %>%
          -lookup_type)
 
 
-# NA korrigeren
+# NA korrigeren (= keine Meinung/Empfehlung)
 tmp_voting_long <- tmp_voting_long %>%
   mutate(label = case_when(
     is.na(label) & grepl("^p-|^pdev-", variable) ~ "parole_keine",
@@ -1363,7 +1366,7 @@ elec_gemeinde_lvl_state <- elec_gemeinde_lvl_state %>%
 
 # Parteistärken (Staatsebene) dazu laden
 voting_5y_long_strength <- voting_5y_long %>%
-  filter(!grepl("^pdev-", variable)) %>%      # pdev- vorläufig ausschliessen
+  filter(!grepl("^pdev-", variable)) %>%      # pdev- ausschliessen
   mutate(year = as.numeric(year(datum))) %>%
   select(anr, year, Partei, annahme, parole_Ja, parole_Nein, parole_keine) %>% 
   
@@ -1473,6 +1476,8 @@ voting_5y_long_strength_wtd_summary %>%
 ```{r}
 #| label: add_initial_columns_again
 
+str(voting_5y_long)
+colnames(voting_5y_long)
 
 # Vorerst ignorierte Spalten (partiell) wieder hinzufügen
 voting_5y_final <- voting_5y_long_strength_wtd_summary %>%
@@ -1501,6 +1506,12 @@ voting_5y_final <- voting_5y_long_strength_wtd_summary %>%
                      inserate_neutral    = `inserate-neutral`,
                      mediares_tot        = `mediares-tot`,
                      mediaton_tot        = `mediaton-tot`,
+
+                     nrja,
+                     nrnein,
+                     srja,
+                     srnein,
+                  
                      bet,
                      leer,
                      ungultig,
@@ -1508,6 +1519,7 @@ voting_5y_final <- voting_5y_long_strength_wtd_summary %>%
                      volkja_proz        = `volkja-proz`) %>%
               distinct(),
             by = "anr")
+
 
 # Zeilenzahl prüfen
 nrow(voting_5y_final) == nrow(voting_5y_long_strength_wtd_summary)
@@ -1531,9 +1543,18 @@ voting_5y_final <- voting_5y_final %>%
          inserate_ja            = as.numeric(inserate_ja),
          inserate_nein          = as.numeric(inserate_nein),
          inserate_neutral       = as.numeric(inserate_neutral),
-         inserate_ja_pct        = as.numeric(inserate_ja),
-         inserate_nein_pct      = as.numeric(inserate_nein),
-         inserate_neutral_pct   = as.numeric(inserate_neutral),
+         #inserate_ja_pct        = as.numeric(inserate_ja),
+         #inserate_nein_pct      = as.numeric(inserate_nein),
+         #inserate_neutral_pct   = as.numeric(inserate_neutral),
+         nrja                   = as.numeric(nrja),
+         #nrja_pct               = as.numeric(nrja_pct),
+         nrnein                 = as.numeric(nrnein),
+         #nrnein_pct             = as.numeric(nrnein_pct),
+         srja                   = as.numeric(srja),
+         #srja_pct               = as.numeric(srja_pct),
+         srnein                 = as.numeric(srnein),
+         #srnein_pct             = as.numeric(srnein_pct),
+
          mediares_tot           = as.numeric(mediares_tot),
          mediaton_tot           = as.numeric(mediaton_tot),
          bet                    = as.numeric(bet),
@@ -1552,7 +1573,11 @@ str(voting_5y_final)
 voting_5y_final <- voting_5y_final %>%
   mutate(inserate_ja_pct = 100 * inserate_ja / inserate_total,
          inserate_nein_pct = 100 * inserate_nein / inserate_total,
-         inserate_neutral_pct = 100 * inserate_neutral / inserate_total)
+         inserate_neutral_pct = 100 * inserate_neutral / inserate_total,
+         nrja_pct     = 100 * nrja / (nrja + nrnein),
+         nrnein_pct   = 100 * nrnein / (nrja + nrnein),
+         srja_pct     = 100 * srja / (srja + srnein),
+         srnein_pct   = 100 * srnein / (srja + srnein))
 
 ```
 
@@ -1561,7 +1586,7 @@ Function: "Klassenmutation" Codeblock schreiben
 ```{r}
     
 
-df_name <- "voting_5y_final"
+#df_name <- "voting_5y_final"
 
 # Funktion: Erzeugt den Mutate-Block
 generate_codeblock_4_type_conversion <- function(df, df_name = "df") {
@@ -1606,13 +1631,14 @@ generate_codeblock_4_type_conversion(voting_5y_final,
 
 ```{r}
 
+
+#TODO: Umwandlung obsolet?!
 #relevante Spalten in numerisch umwandeln
 voting_5y_final <- voting_5y_final %>%
   mutate(annahme = as.numeric(annahme),
          state_parole_Ja = as.numeric(state_parole_Ja),
          kt_parole_Ja = as.numeric(kt_parole_Ja),
          gemeinde_parole_Ja = as.numeric(gemeinde_parole_Ja))
-
 
 
 ##################################
@@ -1795,10 +1821,15 @@ ob und wie stark die Parolen der Parteien (auf Staats-, Kantons- und Gemeindeebe
 
 ```{r}
 
-voting_5y_final <- voting_5y_final %>%
-  mutate_at(vars(matches("inserate|mediares|mediaton|bet|leer|ungultig")),
-            as.numeric)
-  
+# voting_5y_final <- voting_5y_final %>%
+#   mutate_at(vars(matches("inserate|mediares|mediaton|bet|leer|ungultig")),
+#             as.numeric)
+#   
+
+
+
+
+
 # Fälle identifizieren: "Paradoxe" Abstimmungen
 # Annahme == 1, aber state_parole_Ja < 50 (und/oder die anderen Ebenen)
 # Annahme == 0, aber state_parole_Ja >= 50 (und/oder die anderen Ebenen)
@@ -1875,27 +1906,26 @@ modell <- glm(
 summary(modell)
 ```
 
-Korrelationsmatrix
+### Korrelationsmatrix 
 
 ```{r}
 
-library(tidyverse)
-library(ggplot2)
-library(corrplot)
-library(GGally)
-
-
-
-
 ####
 ####Interpretieren!
+#### Verwendung von Volkja_proz
 ####
 
-# a) Für den Zeitraum 2019–2025 (alle Variablen, die bis 2025 verfügbar sind):
+
+# Fehelende Werte/NA zeigen
+Abstract(voting_5y_final)
+
+# Variablen "Inserate.." sowie "leer", "ungültig" und "gultig" nur bis Ende 2023 
+
+# a) Zeitraum 2019–2025 (Variablen zu reduziere)
 df_2019_2025 <- voting_5y_final %>%
   filter(year >= 2019 & year <= 2025)
 
-# b) Für den Zeitraum 2019–2023 (nur Variablen, die bis 2023 verfügbar sind):
+# b) Zeitraum 2019-2023 (alle Variablen)
 df_2019_2023 <- voting_5y_final %>%
   filter(year >= 2019 & year <= 2023)
 
@@ -1903,17 +1933,28 @@ df_2019_2023 <- voting_5y_final %>%
 # 3. Korrelation zwischen tatsächlichem Ergebnis und Parolen
 # a) Korrelation berechnen
 
+
+
+
 # Nur relevante Spalten auswählen
 cor_data <- df_2019_2025 %>%
   mutate(inserate_ja_pct = 100 * inserate_ja / inserate_total,
          inserate_nein_pct = 100 * inserate_nein / inserate_total,
          inserate_neutral_pct = 100 * inserate_neutral / inserate_total) %>%
-  select(volkja_proz,
-         state_parole_Ja,
-         kt_parole_Ja,
-         gemeinde_parole_Ja,
+  select(#annahme,            # für logistische Regression
+         volkja_proz,         # für Korrelationsanalysen, da kontinuierlich.
+         state_parole_Ja,     # Prozente
+         kt_parole_Ja,        # Prozente
+         gemeinde_parole_Ja,  # Prozente
+         #nrja,
+         nrja_pct,
+         #nrnein,
+         nrnein_pct,
+         #srja,
+         srja_pct,
+         #srnein,
+         srnein_pct,
          inserate_total,
-         inserate_jaanteil,
          inserate_ja_pct,
          inserate_neutral,
          inserate_neutral_pct,
@@ -1921,6 +1962,8 @@ cor_data <- df_2019_2025 %>%
          inserate_nein_pct,
          mediares_tot,
          mediaton_tot)
+
+str(cor_data)
   
 # Korrelationsmatrix berechnen
 cor_matrix <- cor(cor_data, use = "pairwise.complete.obs")
@@ -1932,10 +1975,6 @@ corrplot(cor_matrix, method = "number", type = "upper")
 ####
 ####Interpretieren!
 ####
-
-
-
-
 
 
 
@@ -2018,17 +2057,17 @@ corrplot(cor_matrix_ext, method = "color", type = "upper")
 
 #b) Paarweise Scatterplots (optional, für mehr Übersicht)
 # Nur ein paar ausgewählte Variablen für Übersichtlichkeit
-GGally::ggpairs(cor_data_numeric[, 1:5])
+GGally::ggpairs(cor_data_numeric[, 1:10])
 
 
 
 #5. Lineare Regression: Welche Faktoren beeinflussen das Abstimmungsergebnis?
 # Einfaches Modell mit Parolen
-model1 <- lm(volkja_proz ~ state_parole_Ja + kt_parole_Ja + gemeinde_parole_Ja, data = df_2019_2025)
+model1 <- lm(annahme ~ state_parole_Ja + kt_parole_Ja + gemeinde_parole_Ja, data = df_2019_2025)
 summary(model1)
 
 # Erweitertes Modell mit weiteren Variablen
-model2 <- lm(volkja_proz ~ state_parole_Ja + kt_parole_Ja + gemeinde_parole_Ja +
+model2 <- lm(annahme ~ state_parole_Ja + kt_parole_Ja + gemeinde_parole_Ja +
                dep + rechtsform + bet + inserate_total + inserate_ja +
                inserate_nein + inserate_neutral + mediares_tot + mediaton_tot,
              data = df_2019_2025)
