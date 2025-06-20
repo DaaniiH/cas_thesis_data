@@ -44,6 +44,7 @@ library(tidyverse)
 library(ggplot2)  # Diagrams
 library(ggforce)  # Diagrams
 library(corrplot) # Korrelation
+library(car)
 library(GGally)   # Diagrams / Korrelation
 library(plotly)   # Diagrams
 
@@ -1730,7 +1731,7 @@ summary_stats_v1 <- voting_5y_final %>%
                values_to = "value") %>%
   pivot_wider(names_from = stat,
               values_from = value) %>% 
-  mutate(Parole = recode(Parole,
+  mutate(Parole = dplyr::recode(Parole,
                          "state" = "State",
                          "kanton" = "Kanton",
                          "gemeinde" = "Gemeinde"))
@@ -1760,39 +1761,31 @@ summary_stats_v1
 
 # Abweichungen berechnen
 voting_5y_final <- voting_5y_final %>%
-  mutate(
-    diff_state = state_parole_Ja - volkja_proz,
-    diff_kanton = kt_parole_Ja - volkja_proz,
-    diff_gemeinde = gemeinde_parole_Ja - volkja_proz
-  )
+  mutate(diff_state = state_parole_Ja - volkja_proz,
+         diff_kanton = kt_parole_Ja - volkja_proz,
+         diff_gemeinde = gemeinde_parole_Ja - volkja_proz)
 
 # Zusammenfassen nach "dep" gruppiert
 summary_stats_v2 <- voting_5y_final %>%
   group_by(rechtsform) %>%
-  summarise(
-    mean_state = mean(diff_state),
-    sd_state = sd(diff_state),
-    mean_kanton = mean(diff_kanton),
-    sd_kanton = sd(diff_kanton),
-    mean_gemeinde = mean(diff_gemeinde),
-    sd_gemeinde = sd(diff_gemeinde)
-  ) %>%
-  pivot_longer(
-    cols = -rechtsform,
-    names_to = c("stat", "Parole"),
-    names_sep = "_",
-    values_to = "value"
-  ) %>%
-  pivot_wider(
-    names_from = stat,
-    values_from = value
-  ) %>%
-  mutate(Parole = recode(Parole,
+  summarise(mean_state = mean(diff_state),
+            sd_state = sd(diff_state),
+            mean_kanton = mean(diff_kanton),
+            sd_kanton = sd(diff_kanton),
+            mean_gemeinde = mean(diff_gemeinde),
+            sd_gemeinde = sd(diff_gemeinde)) %>%
+  pivot_longer(cols = -rechtsform,
+               names_to = c("stat", "Parole"),
+               names_sep = "_",
+               values_to = "value") %>%
+  pivot_wider(names_from = stat,
+              values_from = value) %>%
+  mutate(Parole = dplyr::recode(Parole,
                          "state" = "State",
                          "kanton" = "Kanton",
                          "gemeinde" = "Gemeinde"))
 
-# Visualisierung nach "dep"-Gruppe (z.B. als Facet)
+# Visualisierung nach "dep"-Gruppe
 ggplot(summary_stats_v2, aes(x = Parole, y = mean, fill = Parole)) +
   geom_col(width = 0.6, color = "black") +
   geom_errorbar(aes(ymin = mean - sd, ymax = mean + sd), width = 0.2) +
@@ -1806,103 +1799,84 @@ ggplot(summary_stats_v2, aes(x = Parole, y = mean, fill = Parole)) +
 summary_stats_v2
 ```
 
-ANOVA-Test (diff-state only)
+#### Prüfung der Normalverteilung
+
+##### Grafisch
 
 ```{r}
 
-# Gruppengröße prüfen
-voting_5y_final %>%
-  count(rechtsform)
+# Nur die beiden großen Gruppen auswählen
+gruppen <- c("Fakultatives Referendum", "Volksinitiative")
+df_sub <- voting_5y_final %>% filter(rechtsform %in% gruppen)
 
-voting_5y_final %>%
-  group_by(rechtsform) %>%
-  summarise(
-    n = n(),
-    p_value = if (n() >= 3) shapiro.test(diff_state)$p.value else NA
-  )
-
-# Boxplot zur visuellen Prüfung
-ggplot(voting_5y_final, aes(x = rechtsform, y = diff_state)) +
-  geom_boxplot() +
+# Histogramm mit Facet für jede Gruppe
+ggplot(df_sub, aes(x = diff_state, fill = rechtsform)) +
+  geom_histogram(color = "black", alpha = 0.6, bins = 10) +
+  facet_wrap(~ rechtsform) +
   theme_minimal() +
-  labs(title = "Abweichung diff_state nach Rechtsform",
-       x = "Rechtsform", y = "diff_state")
+  labs(title = "Histogramm der diff_state nach Rechtsform",
+       x = "diff_state", y = "Anzahl")
 
-# Normalverteilung je Gruppe prüfen (Shapiro-Wilk)
-voting_5y_final %>% 
-  filter(rechtsform != "Obligatorisches Referendum") %>% 
-  group_by(rechtsform) %>% 
-  summarise(p_value = shapiro.test(diff_state)$p.value)
-
-
-# Einfaktorielle ANOVA
-anova_model <- aov(diff_state ~ rechtsform, data = voting_5y_final)
-summary(anova_model)
-
-
-#  Wenn Pr(>F) < 0.05, ist der Unterschied signifikant → Rechtsform beeinflusst diff_state.
-
-TukeyHSD(anova_model)
-
+# QQ-Plot für jede Gruppe
+ggplot(df_sub, aes(sample = diff_state)) +
+  stat_qq() +
+  stat_qq_line() +
+  facet_wrap(~ rechtsform) +
+  theme_minimal() +
+  labs(title = "QQ-Plot der diff_state nach Rechtsform")
 
 ```
 
-ANOVA Test alle Ebenen
-
-HIER NOCH WEITERARBEITEN / ABSCHLIESSSEN, DANN KORRELATION UND REGRESSION
+##### **Formale Prüfung  (Shapiro-Wilk-Test)**
 
 ```{r}
-# 1. Gruppengröße prüfen
-voting_5y_final %>%
-  count(rechtsform)
 
-# 2. Shapiro-Wilk-Test für alle 3 diff-Variablen
-normality_tests <- voting_5y_final %>%
-  group_by(rechtsform) %>%
-  summarise(
-    n = n(),
-    p_diff_state = if (n >= 3) shapiro.test(diff_state)$p.value else NA,
-    p_diff_kanton = if (n >= 3) shapiro.test(diff_kanton)$p.value else NA,
-    p_diff_gemeinde = if (n >= 3) shapiro.test(diff_gemeinde)$p.value else NA
-  )
+# Shapiro-Wilk-Test für jede Gruppe
+shapiro.test(df_sub$diff_state[df_sub$rechtsform == "Fakultatives Referendum"])
+shapiro.test(df_sub$diff_state[df_sub$rechtsform == "Volksinitiative"])
 
-print(normality_tests)
+shapiro.test(df_sub$diff_kanton[df_sub$rechtsform == "Fakultatives Referendum"])
+shapiro.test(df_sub$diff_kanton[df_sub$rechtsform == "Volksinitiative"])
 
-# 3. Boxplots zur visuellen Prüfung
-for (var in c("diff_state", "diff_kanton", "diff_gemeinde")) {
-  ggplot(voting_5y_final, aes(x = rechtsform, y = .data[[var]])) +
-    geom_boxplot() +
-    theme_minimal() +
-    labs(
-      title = paste("Abweichung", var, "nach Rechtsform"),
-      x = "Rechtsform",
-      y = var
-    ) +
-    print()
-}
+shapiro.test(df_sub$diff_gemeinde[df_sub$rechtsform == "Fakultatives Referendum"])
+shapiro.test(df_sub$diff_gemeinde[df_sub$rechtsform == "Volksinitiative"])
 
-# 4. ANOVA + Tukey für alle 3 diff-Variablen
-for (var in c("diff_state", "diff_kanton", "diff_gemeinde")) {
-  cat("\n==============================\n")
-  cat("ANOVA für:", var, "\n")
-  cat("==============================\n")
-  
-  formula <- as.formula(paste(var, "~ rechtsform"))
-  model <- aov(formula, data = voting_5y_final)
-  print(summary(model))
-  
-  # Wenn signifikant, Tukey-HSD
-  p_value <- summary(model)[[1]][["Pr(>F)"]][1]
-  if (!is.na(p_value) && p_value < 0.05) {
-    cat("\n→ Signifikanter Unterschied gefunden. Tukey-HSD-Test:\n")
-    print(TukeyHSD(model))
-  } else {
-    cat("\n→ Kein signifikanter Unterschied. Kein Tukey-Test notwendig.\n")
-  }
-}
 ```
 
-#### Tables (Word)
+#### Prüfung der Varianzhomogenität (Levene-Test)
+
+```{r}
+
+leveneTest(diff_state ~ rechtsform, data = df_sub)
+leveneTest(diff_kanton ~ rechtsform, data = df_sub)
+leveneTest(diff_gemeinde ~ rechtsform, data = df_sub)
+
+```
+
+#### T-Test
+
+```{r}
+
+t.test(diff_state ~ rechtsform, data = df_sub, var.equal = TRUE)
+#t.test(diff_kanton ~ rechtsform, data = df_sub, var.equal = TRUE)
+t.test(diff_gemeinde ~ rechtsform, data = df_sub, var.equal = TRUE)
+
+```
+
+#### Mann-Whitney-U-Test / Wilcox
+
+```{r}
+
+# wilcox.test(diff_state ~ rechtsform, data = df_sub)
+wilcox.test(diff_kanton ~ rechtsform, data = df_sub)
+# wilcox.test(diff_gemeinde ~ rechtsform, data = df_sub)
+
+
+# Mediane
+df_sub %>% group_by(rechtsform) %>% summarise(Median = median(diff_kanton))
+```
+
+#### Tables Annahme & Ablehnung(Word)
 
 ```{r}
 
@@ -1915,7 +1889,7 @@ format_table <- function(df) {
   ft <- font(ft, fontname = "Courier New", part = "all")
   ft <- fontsize(ft, size = 8, part = "all")
   ft <- colformat_double(ft, digits = 2)
-  ft <- colformat_double(ft, digits = 1, suffix = "%")
+  #ft <- colformat_double(ft, digits = 1, suffix = "%")
   ft <- width(ft, j = 2, width = 2)
   return(ft)
 }
@@ -1927,14 +1901,6 @@ ft1 <- format_table(df1)
 # Tabelle 2: ABGELEHNT
 df2 <- head(abgelehnt_ohne_nein_parole_50)
 ft2 <- format_table(df2)
-
-# Tabelle 3: VARIANZ
-df3 <- head(summary_stats_v1)
-ft3 <- format_table(df3)
-
-# Tabelle 4: VARIANZ Gruppiert nach Rechtsform
-df4 <- head(summary_stats_v2)
-ft4 <- format_table(df4)
 
 
 # Word-Dokument erstellen und beide Tabellen einfügen ---
@@ -1950,24 +1916,65 @@ doc <- body_add_par(doc,
                     style = "heading 1")
 doc <- body_add_flextable(doc,
                           ft2)
-doc <- body_add_par(doc, "") # Leerzeile
+
+
+# Speichern 
+print(doc, target = "result/Annahme_Ablehnung.docx")
+```
+
+#### Tables Varianz (Word)
+
+```{r}
+
+# Funktion für identische Formatierung
+format_table <- function(df) {
+  df[[1]] <- as.character(df[[1]])
+  ft <- flextable(df)
+  ft <- theme_vanilla(ft)
+  ft <- font(ft, fontname = "Courier New", part = "all")
+  ft <- fontsize(ft, size = 8, part = "all")
+  ft <- colformat_double(ft, digits = 2)
+  #ft <- colformat_double(ft, digits = 1, suffix = "%")
+  ft <- width(ft, j = 2, width = 2)
+  return(ft)
+}
+
+
+# Tabelle 1: VARIANZ
+df1 <- head(summary_stats_v1)
+ft1 <- format_table(df1)
+
+# Tabelle 2: VARIANZ Gruppiert nach Rechtsform
+df2 <- head(summary_stats_v2)
+ft2 <- format_table(df2)
+
+
+# Word-Dokument erstellen und beide Tabellen einfügen ---
+doc <- read_docx()
 doc <- body_add_par(doc,
                     "Mittlere Abweichung der Parolen vom Volksentscheid - Mit Standardabweichung",
                     style = "heading 1")
 doc <- body_add_flextable(doc,
-                          ft3)
+                          ft1)
 doc <- body_add_par(doc, "") # Leerzeile
 doc <- body_add_par(doc,
                     "Mittlere Abweichung der Parolen vom Volksentscheid - Mit Standardabweichung. Gruppiert nach Departement.",
                     style = "heading 1")
 doc <- body_add_flextable(doc,
-                          ft4)
+                          ft2)
 
 # Speichern 
-print(doc, target = "result/Annahme_Ablehnung_Varianz.docx")
+print(doc, target = "result/Varianz.docx")
 ```
 
-#### Plots
+#### Tables vergleichende Gruppenstatistik (Word)
+
+```{r}
+
+#Todo
+```
+
+#### Plots - ÜBERARBEITEN
 
 ```{r}
 
@@ -2085,11 +2092,6 @@ ggplot(df_negativ_long,
        title = "Abgelehnte Abstimmungen mit Ja-Parolen-Mehrheit") +
   theme(axis.text.x = element_text(angle = 45,
                                    hjust = 1))
-```
-
-```{r}
-
-
 ```
 
 HIER WEITERARBEITEN - Korrelation!!
