@@ -38,19 +38,28 @@ library(writexl)  # Write Excel files
 
 library(flextable) # Tables for Word
 library(officer)   # Tables for Word
+library(effects)
 
-library(tidyr)
-library(tidyverse)
+
+
 library(ggplot2)  # Diagrams
 library(ggforce)  # Diagrams
 library(corrplot) # Korrelation
+library(ggcorrplot)
+library(reshape2)
 library(car)
+library(e1071)
+library(MASS)
+library(pscl)
+library(pROC)
 library(GGally)   # Diagrams / Korrelation
 library(plotly)   # Diagrams
 
 library(DT)       # datatable()
 
 library(DescTools)
+library(tidyr)
+library(tidyverse)
 library(dplyr)    # am Schluss laden, u.a. select() greift sonst aufs falsche
 ```
 
@@ -787,7 +796,7 @@ elec_gemeinde_combined$year <- as.integer(as.character(elec_gemeinde_combined$ye
 
 
 lookup_parties_consolidated %>%
-  count(party_orig_value) %>%
+  dplyr::count(party_orig_value) %>%
   filter(n > 1)
 
 lookup_parties_consolidated %>%
@@ -1706,6 +1715,32 @@ abgelehnt_ohne_nein_parole_50 <- abgelehnt %>%
 print(abgelehnt_ohne_nein_parole_50)
 ```
 
+### Paradoxe Fälle ÜBERARBEITEN
+
+ob und wie stark die Parolen der Parteien (auf Staats-, Kantons- und Gemeindeebene) mit dem Abstimmungsausgang zusammenhängen – insbesondere in Fällen, wo die Ja-Parole unter 50 % liegt, die Vorlage aber trotzdem angenommen wird (und umgekehrt).
+
+```{r}
+
+# Fälle identifizieren: "Paradoxe" Abstimmungen
+# Annahme == 1, aber state_parole_Ja < 50 (und/oder die anderen Ebenen)
+# Annahme == 0, aber state_parole_Ja >= 50 (und/oder die anderen Ebenen)
+
+# Annahme als numerisch 
+#TODO: OBSOLET?
+voting_5y_final$annahme <- as.numeric(voting_5y_final$annahme)
+
+# Fälle identifizieren
+paradoxe_faelle <- voting_5y_final %>%
+  filter((annahme == 1 & (state_parole_Ja < 50 |
+                            kt_parole_Ja < 50 |
+                            gemeinde_parole_Ja < 50)) |
+           (annahme == 0 & (state_parole_Ja >= 50 |
+                              kt_parole_Ja >= 50 |
+                              gemeinde_parole_Ja >= 50))) %>%
+  select(anr, titel_kurz_d, annahme, state_parole_Ja, kt_parole_Ja, gemeinde_parole_Ja)
+
+```
+
 #### Varianz
 
 ```{r}
@@ -1827,7 +1862,7 @@ ggplot(df_sub, aes(sample = diff_state)) +
 
 ```
 
-##### **Formale Prüfung  (Shapiro-Wilk-Test)**
+##### **Formale Prüfung (Shapiro-Wilk-Test)**
 
 ```{r}
 
@@ -1978,6 +2013,8 @@ print(doc, target = "result/Varianz.docx")
 
 ```{r}
 
+#TODO
+
 ##################################
 ##################################
 #### ANGENOMMEN
@@ -2094,404 +2131,467 @@ ggplot(df_negativ_long,
                                    hjust = 1))
 ```
 
-HIER WEITERARBEITEN - Korrelation!!
-
-ob und wie stark die Parolen der Parteien (auf Staats-, Kantons- und Gemeindeebene) mit dem Abstimmungsausgang zusammenhängen – insbesondere in Fällen, wo die Ja-Parole unter 50 % liegt, die Vorlage aber trotzdem angenommen wird (und umgekehrt).
-
-```{r}
-
-# voting_5y_final <- voting_5y_final %>%
-#   mutate_at(vars(matches("inserate|mediares|mediaton|bet|leer|ungultig")),
-#             as.numeric)
-#   
-
-
-
-
-
-# Fälle identifizieren: "Paradoxe" Abstimmungen
-# Annahme == 1, aber state_parole_Ja < 50 (und/oder die anderen Ebenen)
-# Annahme == 0, aber state_parole_Ja >= 50 (und/oder die anderen Ebenen)
-
-# Annahme als numerisch
-voting_5y_final$annahme <- as.numeric(voting_5y_final$annahme)
-
-# Fälle identifizieren
-paradoxe_faelle <- voting_5y_final %>%
-  filter(
-    (annahme == 1 & (state_parole_Ja < 50 | kt_parole_Ja < 50 | gemeinde_parole_Ja < 50)) |
-    (annahme == 0 & (state_parole_Ja >= 50 | kt_parole_Ja >= 50 | gemeinde_parole_Ja >= 50))
-  ) %>%
-  select(anr, titel_kurz_d, annahme, state_parole_Ja, kt_parole_Ja, gemeinde_parole_Ja)
-
-
-# a) Einzelne Korrelationen
-# Du kannst die Korrelation (z.B. Pearson) zwischen den Parolen-Anteilen und dem Abstimmungsausgang berechnen. Da annahme binär ist, empfiehlt sich auch eine logistische Regression (siehe unten)
-
-cor.test(voting_5y_final$state_parole_Ja, voting_5y_final$annahme)
-cor.test(voting_5y_final$kt_parole_Ja, voting_5y_final$annahme)
-cor.test(voting_5y_final$gemeinde_parole_Ja, voting_5y_final$annahme)
-
-
-# b) Kombinationen prüfen (multivariat)
-# Eine logistische Regression zeigt dir, wie stark die einzelnen Parolen-Anteile (auch gemeinsam) den Ausgang vorhersagen:
-
-modell <- glm(annahme ~ state_parole_Ja + kt_parole_Ja + gemeinde_parole_Ja, 
-              data = voting_5y_final, family = binomial)
-summary(modell)
-# Die Estimate-Werte zeigen, wie stark ein Prozentpunkt mehr Ja-Parole die Annahmewahrscheinlichkeit beeinflusst.
-# 
-# Die p-Werte zeigen dir die Signifikanz.
-# 
-# Du kannst auch Interaktionen testen, z.B. ob die Kombination von hoher Ja-Parole auf mehreren Ebenen besonders stark wirkt.
-
-
-#Scatterplot
-ggplot(voting_5y_final, aes(x=state_parole_Ja, y=annahme)) +
-  geom_jitter(height=0.05, width=0) +
-  geom_smooth(method="glm", method.args=list(family="binomial"), se=FALSE) +
-  labs(title="Zusammenhang State-Parole Ja und Annahme")
-
-# 
-# 5. Fazit und Interpretation
-# Korrelationen zeigen, wie stark der Zusammenhang ist.
-# 
-# Logistische Regression zeigt, wie stark die einzelnen Variablen (auch gemeinsam) den Ausgang beeinflussen.
-# 
-# Paradoxe Fälle geben Hinweise auf Sonderfälle, bei denen andere Faktoren eine Rolle spielen könnten (z.B. Medienkampagnen, Inserate, etc.).
-
-
-########### Erweitertes Modell
-
-# Annahme als numerisch (0/1)
-voting_5y_final$annahme <- as.numeric(voting_5y_final$annahme)
-
-# Umwandlung der relevanten Variablen in numerisch
-voting_5y_final <- voting_5y_final %>%
-  mutate(across(c(inserate_total,
-                  inserate_ja,
-                  inserate_nein,
-                  inserate_neutral,
-                  mediares_tot,
-                  mediaton_tot), as.numeric))
-
-# Modellformel
-modell <- glm(
-  annahme ~ state_parole_Ja + kt_parole_Ja + gemeinde_parole_Ja +
-    dep + rechtsform + inserate_total + inserate_ja + inserate_nein +
-    inserate_neutral + mediares_tot + mediaton_tot,
-  data = voting_5y_final,
-  family = binomial)
-summary(modell)
-```
-
-### Daten für Korrelationsmatrix und Regressionsmodell
+### Korrelation
 
 ```{r}
 
 str(voting_5y_final)
 
-# Fehelende Werte/NA zeigen
-Abstract(voting_5y_final)
 
-# Variablen "Inserate.." sowie "leer", "ungültig" und "gultig" nur bis Ende 2023 
-
-# a) Zeitraum 2019–2025 (nicht alle Variablen über gesammten Zeitraum verfügbar)
-df_2019_2025 <- voting_5y_final %>%
-  filter(year >= 2019 & year <= 2025)
-
-# b) Zeitraum 2019-2023 (alle Variablen durchgehend verfügbar)
-df_2019_2023 <- voting_5y_final %>%
-  filter(year >= 2019 & year <= 2023)
-
-```
-
-### Korrelationsmatrix (GUT!)
-
-```{r}
-
-####
-####Interpretieren!
-#### Verwendung von Volkja_proz
-####
-
-# Korrelation zwischen tatsächlichem Ergebnis und Parolen
-# Korrelation berechnen
-
-# Nur relevante Spalten auswählen
-cor_data <- df_2019_2025 %>%
-  select(#annahme,            # für logistische Regression
-         volkja_proz,         # für Korrelationsanalysen, da kontinuierlich.
-         state_parole_Ja,     # Prozente
-         kt_parole_Ja,        # Prozente
-         gemeinde_parole_Ja,  # Prozente
-         #nrja,
-         nrja_pct,
-         #nrnein,
-         nrnein_pct,
-         #srja,
-         srja_pct,
-         #srnein,
-         srnein_pct,
+# Auswahl relevanter numerischer Variablen
+subset_corr <- voting_5y_final %>%
+  select(annahme,
+         volkja_proz,
+         diff_state,
+         diff_kanton,
+         diff_gemeinde,
+         state_parole_Ja,
+         kt_parole_Ja,
+         gemeinde_parole_Ja,
          inserate_total,
          inserate_ja_pct,
-         inserate_neutral,
-         inserate_neutral_pct,
-         inserate_nein,
-         inserate_nein_pct,
          mediares_tot,
-         mediaton_tot)
-
-str(cor_data)
-  
-# Korrelationsmatrix berechnen
-cor_matrix <- cor(cor_data, use = "pairwise.complete.obs")
-print(cor_matrix)
-
-# Visualisierung der Korrelation
-corrplot(cor_matrix, method = "number", type = "upper")
-
-####
-####Interpretieren!
-####
+         mediaton_tot,
+         bet,
+         nrja_pct,
+         srja_pct)
 
 
 
-#c) Scatterplots zur Visualisierung
-# Scatterplot für jede Ebene
-ggplot(df_2019_2025, aes(x = state_parole_Ja, y = volkja_proz)) +
-  geom_point() +
-  geom_smooth(method = "lm") +
-  labs(title = "Tatsächliche vs. erwartete Ja-Stimmen (Staatsebene)")
-
-ggplot(df_2019_2025, aes(x = kt_parole_Ja, y = volkja_proz)) +
-  geom_point() +
-  geom_smooth(method = "lm") +
-  labs(title = "Tatsächliche vs. erwartete Ja-Stimmen (Kantonsebene)")
-
-ggplot(df_2019_2025, aes(x = gemeinde_parole_Ja, y = volkja_proz)) +
-  geom_point() +
-  geom_smooth(method = "lm") +
-  labs(title = "Tatsächliche vs. erwartete Ja-Stimmen (Gemeindeebene)")
-
-
-# 
-# Interpretation von Scatterplots mit Trendlinie
-# 1. Trendlinie betrachten
-# 
-# Eine ansteigende Trendlinie von links unten nach rechts oben zeigt einen positiven Zusammenhang: Je mehr Parteien auf einer Ebene die Ja-Parole ausgeben, desto höher ist tendenziell der tatsächliche Ja-Stimmenanteil (volkja_proz).
-# 
-# Eine abfallende Trendlinie würde auf einen negativen Zusammenhang hindeuten (was hier nicht zu erwarten ist).
-# 
-# Ist die Trendlinie flach oder kaum erkennbar, besteht kein oder nur ein sehr schwacher Zusammenhang zwischen den Variablen.
-# 
-# 2. Streuung der Punkte
-# 
-# Liegen die Punkte nah an der Trendlinie, ist der Zusammenhang stark und die Parolen sind ein guter Prädiktor für das Abstimmungsergebnis.
-# 
-# Sind die Punkte weit gestreut, ist der Zusammenhang schwächer und andere Faktoren spielen eine größere Rolle.
-# 
-# 3. Ausreißer identifizieren
-# 
-# Einzelne Punkte, die weit von der Trendlinie entfernt liegen, sind Ausreißer. Sie können auf spezielle Abstimmungen oder außergewöhnliche Umstände hinweisen und sollten ggf. genauer untersucht werden.
-# 
-# 4. Quadrantenanalyse (optional)
-# 
-# Du kannst das Scatterplot in vier Quadranten einteilen, um Cluster zu identifizieren, z.B. Abstimmungen mit wenig Parolenunterstützung und wenig Ja-Stimmen (links unten) oder viel Parolenunterstützung und viele Ja-Stimmen (rechts oben).
-# 
-# Was bedeutet das für deine Analyse?
-# Eine deutliche, ansteigende Trendlinie in deinen Scatterplots bestätigt, dass die Parolen (egal ob auf Staats-, Kantons- oder Gemeindeebene) einen positiven Einfluss auf das tatsächliche Abstimmungsergebnis haben.
-# 
-# Die Steilheit der Trendlinie und die Nähe der Punkte zur Linie geben Aufschluss über die Stärke dieses Einflusses: Je steiler und enger, desto stärker der Zusammenhang.
-# 
-# Die Scatterplots helfen dir, schnell zu erkennen, ob und wie stark die Parolen mit dem Abstimmungsergebnis zusammenhängen und ob es Ausreißer gibt, die weiter untersucht werden sollten.
-# 
-# Zusammengefasst:
-# Die Scatterplots visualisieren, wie stark und in welche Richtung die Parolen auf den verschiedenen Ebenen mit dem tatsächlichen Ja-Stimmenanteil zusammenhängen. Eine klare, ansteigende Trendlinie und wenig Streuung bedeuten, dass die Parolen ein guter Prädiktor für das Ergebnis sind. Ausreißer oder starke Streuung deuten darauf hin, dass weitere Faktoren das Abstimmungsergebnis beeinflussen können.
+# Erste Visualisierung: Streudiagrammmatrix
+pairs(subset_corr, main = "Streudiagrammmatrix der ausgewählten Variablen")
 
 
 
+# Prüfung auf Normalverteilung
+
+subset_corr_long <- pivot_longer(subset_corr, everything(), names_to = "Variable", values_to = "Wert")
+
+# Histogramme
+ggplot(subset_corr_long, aes(x = Wert)) +
+  geom_histogram(bins = 10, fill = "steelblue", color = "black") +
+  facet_wrap(~ Variable, scales = "free") +
+  theme_minimal() +
+  labs(title = "Histogramme der ausgewählten Variablen")
+
+# QQ-Plots
+ggplot(subset_corr_long, aes(sample = Wert)) +
+  stat_qq() +
+  stat_qq_line() +
+  facet_wrap(~ Variable, scales = "free") +
+  theme_minimal() +
+  labs(title = "QQ-Plots der ausgewählten Variablen")
+
+# Shapiro-Wilk-Test für alle Variablen
+apply(subset_corr, 2, shapiro.test)
 
 
 
-#################################
+# # Korrelationsmatrix berechnen
+# # Pearson-Korrelation (für normalverteilte Variablen)
+# cor_matrix_pearson <- cor(subset_corr, use = "complete.obs", method = "pearson")
+# print(round(cor_matrix_pearson, 2))
 
-# 4. Erweiterte Analyse: Einfluss weiterer Variablen
-# a) Korrelationsmatrix mit weiteren Variablen
-
-
-# Relevante Variablen auswählen
-cor_data_extended <- df_2019_2025 %>%
-  select(volkja_proz, state_parole_Ja, kt_parole_Ja, gemeinde_parole_Ja,
-         dep, rechtsform, bet, inserate_total, inserate_ja, inserate_nein,
-         inserate_neutral, mediares_tot, mediaton_tot)
-
-str(cor_data_extended)
-# Nur numerische Variablen für die Korrelation
-cor_data_numeric <- cor_data_extended %>% select(where(is.numeric))
-cor_matrix_ext <- cor(cor_data_numeric, use = "pairwise.complete.obs")
-str(cor_data_numeric)
-corrplot(cor_matrix_ext, method = "color", type = "upper")
-
-
-#b) Paarweise Scatterplots (optional, für mehr Übersicht)
-# Nur ein paar ausgewählte Variablen für Übersichtlichkeit
-GGally::ggpairs(cor_data_numeric[, 1:10])
+# Spearman-Korrelation (robuster bei Nicht-Normalverteilung)
+cor_matrix_spearman <- cor(subset_corr, use = "complete.obs", method = "spearman")
+print(round(cor_matrix_spearman, 2))
 
 
 
-```
+#Visualisierung der Korrelationsmatrix
+corrplot(cor_matrix_spearman, method = "color", addCoef.col = "black", tl.col = "black")
 
-### Regression
+# #Visualisierung der Korrelationsmatrix als Heatmap
+# melted_cor <- melt(round(cor_matrix_spearman, 2))
+# ggplot(data = melted_cor,
+#        aes(x=Var1,
+#            y=Var2,
+#            fill=value)) +
+#   geom_tile() +
+#   geom_text(aes(label = value),
+#             size = 4) +
+#   scale_fill_gradient2(low = "blue",
+#                        high = "red", 
+#                        limit = c(-1,1),
+#                        name="Correlation") +
+#   theme(axis.title.x = element_blank(),
+#         axis.title.y = element_blank(),
+#         panel.background = element_blank())
 
--   Die lineare Regression zeigt feine Unterschiede im Ja-Anteil.
 
--   Die logistische Regression zeigt, was wirklich den Ausschlag für Annahme/Ablehnung gibt.
-
-#### Regresssion - Lineares Modell
-
-```{r}
-
-# Zielvariable: "volkja_proz" (Prozentsatz der Ja-Stimmen, metrisch)
-# 
-# Regressionstyp: Lineare Regression (lm)
-# 
-# Vorteile:
-# - volle Information (wie hoch ist die Zustimmung in Prozent?).
-# - auch kleine Unterschiede zwischen den Abstimmungen analysieren.
-# 
-# Fragestellung:
-# - Wie stark beeinflussen Inserate, Medienresonanz, etc. den Ja-Anteil?
-# 
-# Interpretation:
-# - Effekt zeigt, wie viele Prozentpunkte sich die Ja-Stimmen bei Änderung der Prädiktoren verändern. e.g. "Ein Anstieg der Ja-Inserate um 10% erhöht den Ja-Stimmen-ANTEIL um 1,5 Prozentpunkte."
+# #Visualisierung der Korrelationsmatrix mit ggcorrplot
+# ggcorrplot(cor_matrix_spearman, lab = TRUE)
 
 
 
 
+#Hier WEITERARBEITEN 
 
-
-  ##############################################
-  # Formel bauen
-  # Alle Spaltennamen anzeigen
-  names(voting_5y_final)
-  str(voting_5y_final)
-  
-  # Zielvariable und auszuschließende Variablen
-  target <- "volkja_proz"
-  exclude <- c("annahme", "titel_kurz_d", "anr", "year")
-  
-  # Prädiktoren bestimmen
-  predictors <- setdiff(names(voting_5y_final), c(target, exclude))
-  
-  # Formel als Text zusammenbauen
-  formel_text <- paste(target, "~", paste(predictors, collapse = " + "))
-  cat(formel_text)
-  ##############################################
+# Signifikanz einzelner Korrelationen prüfen
+# cor.test(voting_5y_final$diff_state, voting_5y_final$volkja_proz, method = "pearson")
+cor.test(voting_5y_final$diff_kanton, voting_5y_final$inserate_ja_pct, method = "spearman")
 
 
 
-##############################################
-# Prädiktorenauswahl aüf Lineares Modell
-# Alle Variablen ausser
-# - Zielvariable (volkja_proz) und
-# - nicht-numerische ("annahme" & "titel")
 
-full_model_lm <- lm(volkja_proz ~ . - annahme - titel_kurz_d,
+# Zielvariablen
+target_vars <- c("annahme",
+                 "volkja_proz")
+
+# Numerische Variablen im df ohne Zielvariablen
+compare_vars <- setdiff(names(subset_corr),
+                        target_vars)
+
+# Kombis von Zielvariable und Vergleichsvariablen testen
+cor_test_result <- expand_grid(target = target_vars,
+                               compare_to = compare_vars) %>%
+  mutate(test = map2(target,
+                     compare_to,
+                     ~ cor.test(subset_corr[[.x]],
+                                subset_corr[[.y]],
+                                method = "spearman")),
+         rho = map_dbl(test, ~ .x$estimate),
+         p_value = map_dbl(test, ~ .x$p.value)) %>%
+  select(target,
+         compare_to,
+         rho,
+         p_value)
+
+# Ergebnis anzeigen
+print(cor_test_result) %>% print(n=Inf)
+
+
+cor_test_result_filtered <- cor_test_result %>% 
+  filter(abs(rho) > 0.5,
+         p_value < 0.05) %>%
+  arrange(target,
+          desc(abs(rho)))
+
+
+#TODO word print..
+# Ergebnis anzeigen
+print(cor_test_result_filtered)
+
+
+
+# VIF mit allen Variablen
+mod_vif <- lm(volkja_proz ~ 
+                diff_state + diff_kanton + diff_gemeinde +
+                state_parole_Ja + kt_parole_Ja + gemeinde_parole_Ja +
+                inserate_total + inserate_ja_pct + mediares_tot + mediaton_tot +
+                bet + nrja_pct + srja_pct,
+              data = voting_5y_final)
+vif(mod_vif)
+
+alias(mod_vif)
+
+mod_vif_fixed <- lm(volkja_proz ~
+                      # diff_state + diff_kanton + diff_gemeinde +
+                      state_parole_Ja + kt_parole_Ja + gemeinde_parole_Ja +
+                      inserate_total + inserate_ja_pct + mediares_tot +
+                      mediaton_tot + bet + nrja_pct + srja_pct,
                     data = voting_5y_final)
 
+vif(mod_vif_fixed)
 
-step_model_lm <- step(full_model_lm, direction = "both")
+```
 
-summary(step_model_lm)
+## Modelllierung
 
+### Lineare Regression
 
-par(mfrow = c(2, 2))   # 2x2-Layout für vier Plots
-plot(step_model_lm)
-par(mfrow = c(1, 1))
+#### Modelle erstellen
 
-library(effects)
-plot(allEffects(step_model_lm))
+```{r}
 
-plot(voting_5y_final$mediares_tot, voting_5y_final$volkja_proz,
-     xlab = "Medienresonanz", ylab = "Ja-Stimmen-Anteil (%)")
-abline(lm(volkja_proz ~ mediares_tot, data = voting_5y_final), col = "red")
+#SR und NR als Parlament zusammenfassen
+voting_5y_final <- str(voting_5y_final) %>%
+  mutate(parliament_ja_avg = (nrja_pct + srja_pct) / 2)
 
-
-
-
-# Lineares Regressionsmodell mit volkja_proz als Zielvariable
-model_lm <- lm(volkja_proz ~ inserate_ja_pct +
-                 inserate_nein_pct +
+# Modell state
+lm_state <- lm(volkja_proz ~ state_parole_Ja +
+                 inserate_total + inserate_ja_pct +
+                 mediares_tot + mediaton_tot +
                  bet,
                data = voting_5y_final)
-summary(model_lm)
+summary(lm_state)
 
+# Modell kanton
+lm_kanton<- lm(volkja_proz ~ kt_parole_Ja +
+                 inserate_total + inserate_ja_pct +
+                 mediares_tot + mediaton_tot +
+                 bet,
+               data = voting_5y_final)
+summary(lm_kanton)
 
-model_lm <- lm(volkja_proz ~ 
-                 state_parole_Ja +
-                 kt_parole_Ja +
-                 gemeinde_parole_Ja +
-                 nrja_pct +
-                 srja_pct +
-                 inserate_ja_pct +
-                 inserate_nein_pct +
-                 inserate_total +
-                 mediaton_tot,
-               data = cor_data)
+# Modell gemeinde
+lm_gemeinde<- lm(volkja_proz ~ gemeinde_parole_Ja +
+                   inserate_total + inserate_ja_pct +
+                   mediares_tot + mediaton_tot +
+                   bet,
+               data = voting_5y_final)
+summary(lm_gemeinde)
 
-# Modell zusammenfassen
-summary(model_lm)
-
-
-
-```
-
-#### Regression - logistisches Modell
-
-```{r}
-
-# Zielvariable: "annahme" (Ja/Nein, binär: 1 = angenommen, 0 = abgelehnt)
-# Regressionstyp: Logistische Regression (glm(..., family = binomial))
-# 
-# Vorteile:
-# - welche Faktoren beinflussen die Wahrscheinlichkeit einer Annahme
-# - primär um zu schauen ob eine Vorlage angenommen/abgelehnt wurde
-# 
-#  Fragestellung:
-# - Welche Faktoren erhöhen die Chance, dass eine Vorlage angenommen wird?
-# 
-# Interpretation:
-# - Die Effekte zeigen, wie sich die Wahrscheinlichkeit der Annahme verändert. e.g. "Ein Anstieg der Ja-Inserate um 10% erhöht die WAHRSCHEINLICHKEIT einer Annahme um 20%."
-
-
-
-model_logit <- glm(annahme ~ inserate_ja_pct +
-                     inserate_nein_pct +
+# Modell parliament
+lm_parliament<- lm(volkja_proz ~ parliament_ja_avg +
+                     inserate_total + inserate_ja_pct +
+                     mediares_tot + mediaton_tot +
                      bet,
-                   data = voting_5y_final,
-                   family = binomial)
-summary(model_logit)
+               data = voting_5y_final)
+summary(lm_parliament)
+```
+
+#### Kennzahlen extrahieren
+
+```{r}
+
+model_list <- list(State = lm_state,
+                   Kanton = lm_kanton,
+                   Gemeinde = lm_gemeinde,
+                   Parliament = lm_parliament)
+
+# Funktion zum Extrahieren der Werte
+model_stats <- lapply(model_list, function(mod) {
+  c(R2 = summary(mod)$r.squared,
+    AdjR2 = summary(mod)$adj.r.squared,
+    AIC = AIC(mod),
+    BIC = BIC(mod))
+})
 
 
+#TODO Table Word
+# In Dataframe umwandeln
+model_stats_df <- do.call(rbind, model_stats)
+print(round(model_stats_df, 3))
 
 ```
 
-#### Achtung
+#### Visualisierung der Modellgüte
+
+```{r}
+
+# Balkendiagramm für R² und Adjusted R²
+df <- as.data.frame(model_stats_df)
+df$Model <- rownames(df)
+df_melt <- melt(df, id.vars = "Model")
+
+ggplot(df_melt[df_melt$variable %in% c("R2",
+                                       "AdjR2"), ],
+        aes(x = Model,
+            y = value,
+            fill = variable)) +
+  geom_bar(stat = "identity",
+           position = position_dodge()) +
+  ylim(0,1) +
+  labs(title = "Vergleich der Modellgüte (R² und Adjusted R²)",
+       y = "Wert",
+       x = "Modell") +
+  theme_minimal()
+
+
+# AIC/BIC Vergleich (niedriger = besser)
+ggplot(df_melt[df_melt$variable %in% c("AIC", "BIC"), ],
+       aes(x = Model,
+           y = value,
+           fill = variable)) +
+  geom_bar(stat = "identity",
+           position = position_dodge()) +
+  labs(title = "Vergleich von AIC und BIC der Modelle",
+       y = "Wert",
+       x = "Modell") +
+  theme_minimal()
+
+```
+
+### Logarithmische Regression
+
+#### Daten log-transformieren und bereinigen
+
+```{r}
+
+voting_5y_final_log <- voting_5y_final %>%
+  mutate(log_mediares = log(mediares_tot + 1),
+         log_inserate_total = log(inserate_total + 1),
+         log_inserate_ja_pct = log(inserate_ja_pct + 1),
+         log_inserate_neutral_pct = log(inserate_neutral_pct + 1),
+         log_bet = log(bet + 1),
+         log_leer = log(leer + 1),
+         log_ungultig = log(ungultig + 1),
+         log_gultig = log(gultig + 1)) %>%
+  drop_na()
+
+```
+
+#### Multikollinearität via vif() erkennen, bereinigen und Startmodelle erstellen
+
+```{r}
+
+mod_log_state <- glm(annahme ~ state_parole_Ja + 
+                     #kt_parole_Ja + gemeinde_parole_Ja + parliament_ja_avg +
+                     log_mediares + log_inserate_total +
+                     log_inserate_ja_pct + log_inserate_neutral_pct + log_bet +
+                     #log_leer + log_ungultig + log_gultig + 
+                     #rechtsform + 
+                     dep,
+                   data = voting_5y_final_log,
+                   family = binomial)
+vif(mod_log_state)
+
+
+mod_log_kanton <- glm(annahme ~  kt_parole_Ja +
+                     #state_parole_Ja +gemeinde_parole_Ja + parliament_ja_avg +
+                     log_mediares + log_inserate_total +
+                     log_inserate_ja_pct + log_inserate_neutral_pct + log_bet +
+                     #log_leer + log_ungultig + log_gultig + 
+                     #rechtsform + 
+                     dep,
+                   data = voting_5y_final_log,
+                   family = binomial)
+vif(mod_log_kanton)
+
+mod_log_gemeinde <- glm(annahme ~ gemeinde_parole_Ja + 
+                            #state_parole_Ja + #kt_parole_Ja + parliament_ja_avg +
+                            log_mediares + log_inserate_total +
+                            log_inserate_ja_pct + log_inserate_neutral_pct +
+                            #log_bet + log_leer + log_ungultig + log_gultig + 
+                            #rechtsform +
+                            dep,
+                            data = voting_5y_final_log,
+                            family = binomial)
+vif(mod_log_gemeinde)
+
+mod_log_parliament <- glm(annahme ~ parliament_ja_avg +
+                            #state_parole_Ja + #kt_parole_Ja + gemeinde_parole_Ja +
+                            log_mediares + log_inserate_total +
+                            log_inserate_ja_pct + log_inserate_neutral_pct +
+                            #log_bet + log_leer + log_ungultig + log_gultig + 
+                            #rechtsform +
+                            dep,
+                            data = voting_5y_final_log,
+                            family = binomial)
+vif(mod_log_parliament)
+
+```
+
+#### stepAIC für Modellauswahl
+
+```{r}
+
+step_state <- stepAIC(mod_log_state, direction = "both",
+                      trace = FALSE)
+step_kanton <- stepAIC(mod_log_kanton, direction = "both",
+                       trace = FALSE)
+step_gemeinde <- stepAIC(mod_log_gemeinde, direction = "both",
+                         trace = FALSE)
+step_parliament <- stepAIC(mod_log_parliament, direction = "both",
+                           trace = FALSE)
+
+```
+
+#### Modelle vergleichen
+
+##### GVIF-Werte
+
+```{r}
+
+# GVIF-Werte
+# Liste aller Modelle
+model_list <- list(mod_log_state      = mod_log_state,
+                   mod_log_kanton     = mod_log_kanton,
+                   mod_log_gemeinde   = mod_log_gemeinde,
+                   mod_log_parliament = mod_log_parliament)
+
+# Funktion zur Berechnung und Ausgabe
+vif_bandbreite_max <- function(model, model_name) {
+  vif_df <- as.data.frame(vif(model))
+  range_gvif <- range(vif_df$`GVIF^(1/(2*Df))`)
+  bandbreite_gvif <- diff(range_gvif)
+  max_gvif <- max(vif_df$`GVIF^(1/(2*Df))`)
+  max_gvif_var <- rownames(vif_df)[which.max(vif_df$`GVIF^(1/(2*Df))`)]
+  cat("------", model_name, "------\n")
+  cat("Bandbreite (Range):",
+      round(range_gvif[1], 3), "-", round(range_gvif[2], 3), "\n")
+  cat("Bandbreite (Differenz):",
+      round(bandbreite_gvif, 3), "\n")
+  cat("Höchster GVIF^(1/(2Df)) Wert:",
+      round(max_gvif, 3), "(", max_gvif_var, ")\n\n")
+}
+
+# Schleife über alle Modelle
+for (name in names(model_list)) {
+  vif_bandbreite_max(model_list[[name]], name)
+}
+```
+
+##### AIC, Pseudo-R² (McFadden) & AUC
 
 ```{r}
 
 
-# Wähle alle Variablen aus, von denen du erwartest, dass sie einen Einfluss auf deine Zielgröße haben könnten.
+
+# stepAIC() zu kombinieren
+models <- list(State = step_state,
+               Kanton = step_kanton,
+               Gemeinde = step_gemeinde,
+               Parlament = step_parliament)
+
+# # AIC
+# sapply(models, AIC)
 # 
-# Prüfe nach der Regression, welche Prädiktoren tatsächlich signifikant sind (über die p-Werte im Output).
+# # Pseudo-R² (McFadden)
+# sapply(models, function(m) round(pR2(m)["McFadden"], 3))
 # 
-# Entferne ggf. nicht-signifikante Prädiktoren, um das Modell zu vereinfachen (Prinzip der Sparsamkeit).
+# # AUC
+# sapply(models, function(m) {
+#   prob <- predict(m, type = "response")
+#   roc_obj <- roc(voting_5y_final_log$annahme, prob)
+#   round(auc(roc_obj), 3)
+# })
+ 
+
+#  Ergebnisse
+AICs <- sapply(models, AIC)
+McFadden <- sapply(models, function(m) round(pR2(m)["McFadden"], 3))
+AUCs <- sapply(models, function(m) {
+  prob <- predict(m, type = "response")
+  roc_obj <- roc(voting_5y_final_log$annahme, prob)
+  round(auc(roc_obj), 3)
+})
+
+# Zusammenfassung als Dataframe
+summary_df <- data.frame(
+  Modell = names(models),
+  AIC = round(AICs, 2),
+  McFadden_R2 = as.numeric(McFadden),
+  AUC = as.numeric(AUCs),
+  row.names = NULL
+)
+
+# Ausgabe
+print(summary_df)
+
 ```
 
-## Visualization
+#### Odds-ratios und p-Werte interpretieren
 
-### Parteilandschaft Schweiz
+```{r}
+
+
+exp(coef(step_state))  # Odds Ratios
+summary(step_state)    # p-Werte und Interpretation
+
+exp(coef(step_kanton))  # Odds Ratios
+summary(step_kanton)    # p-Werte und Interpretation
+
+exp(coef(step_gemeinde))  # Odds Ratios
+summary(step_gemeinde)    # p-Werte und Interpretation
+
+exp(coef(step_parliament))  # Odds Ratios
+summary(step_parliament)    # p-Werte und Interpretation
+
+```
+
+## Parteilandschaft Schweiz
 
 ### Multi-Dimensions-Model
 
@@ -2723,10 +2823,6 @@ fig
 
 
 ```
-
-# a
-
-# a
 
 # a
 
