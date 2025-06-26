@@ -1093,24 +1093,7 @@ for (name in df_names) {
 }
 ```
 
-### Entwicklung über die Jahre?!
-
 ## Abstimmungen - Daten laden & Umformen
-
-```{r}
-
-#TODO: Wofür?
-#  
-# 
-# # Manuell migrierte Lookup Tabellen aus dem PDF-Codebook (swissvotes.ch) laden
-# # Parteien
-# lookups_codebook_parties <- read_excel("data/lookup_codebook.xlsx",
-#                                        sheet = "parties")
-# # Parteiparolen
-# lookups_codebook_paroles <- read_excel("data/lookup_codebook.xlsx",
-#                                        sheet = "paroles")
-
-```
 
 ### Swissvotes-Datensatz mit Abstimmungsdetails laden
 
@@ -1133,26 +1116,6 @@ voting_raw <- voting_raw %>%
 # Einträge vor 2019 exkludieren
 voting_raw_5y <- voting_raw %>%
   filter(datum >= as.Date("2019-01-01"))
-
-# #TODO: Löschen, nicht benötigt?!
-# # Abstimmungsdaten der letzten 5 Jahre in Vektor schreiben für spätere Selektion
-# voting_5y_dates <- voting_5y %>%
-#   select(datum) %>%
-#   distinct() %>%
-#   pull(datum) %>%
-#   as.character()
-
-# Abstimmungen als datatable() anzeigen
-# datatable(voting_5y,
-#           class = 'nowrap',
-#           filter = 'top',
-#           options = list(pageLength = 7,
-#                          scrollX = TRUE,
-#                          search = list(regex = TRUE,
-#                                        caseInsensitive = TRUE)))
-
-
-
 ```
 
 ```{r}
@@ -1716,9 +1679,9 @@ abgelehnt_ohne_nein_parole_50 <- abgelehnt %>%
 print(abgelehnt_ohne_nein_parole_50)
 ```
 
-### Paradoxe Fälle ÜBERARBEITEN
+### Paradoxe Fälle
 
-ob und wie stark die Parolen der Parteien (auf Staats-, Kantons- und Gemeindeebene) mit dem Abstimmungsausgang zusammenhängen – insbesondere in Fällen, wo die Ja-Parole unter 50 % liegt, die Vorlage aber trotzdem angenommen wird (und umgekehrt).
+Ob und wie stark die Parolen der Parteien (auf Staats-, Kantons- und Gemeindeebene) mit dem Abstimmungsausgang zusammenhängen – insbesondere in Fällen, wo die Ja-Parole unter 50 % liegt, die Vorlage aber trotzdem angenommen wird (und umgekehrt).
 
 ```{r}
 
@@ -1879,6 +1842,38 @@ shapiro.test(df_sub$diff_gemeinde[df_sub$rechtsform == "Volksinitiative"])
 
 ```
 
+##### Ergebnisse Shapiro-Wilk-Test (tabellarisch)
+
+```{r}
+
+# Ergebnisse in Liste schreiben
+results_shapiro <- tibble(Ebene = rep(c("Staat", "Kanton", "Gemeinde"),
+                                    each = 2),
+                        Rechtsform = rep(c("Fakultatives Referendum",
+                                           "Volksinitiative"),
+                                         times = 3),
+                        W = c(
+    shapiro.test(df_sub$diff_state[df_sub$rechtsform == "Fakultatives Referendum"])$statistic,
+    shapiro.test(df_sub$diff_state[df_sub$rechtsform == "Volksinitiative"])$statistic,
+    shapiro.test(df_sub$diff_kanton[df_sub$rechtsform == "Fakultatives Referendum"])$statistic,
+    shapiro.test(df_sub$diff_kanton[df_sub$rechtsform == "Volksinitiative"])$statistic,
+    shapiro.test(df_sub$diff_gemeinde[df_sub$rechtsform == "Fakultatives Referendum"])$statistic,
+    shapiro.test(df_sub$diff_gemeinde[df_sub$rechtsform == "Volksinitiative"])$statistic
+  ),
+  p_value = c(
+    shapiro.test(df_sub$diff_state[df_sub$rechtsform == "Fakultatives Referendum"])$p.value,
+    shapiro.test(df_sub$diff_state[df_sub$rechtsform == "Volksinitiative"])$p.value,
+    shapiro.test(df_sub$diff_kanton[df_sub$rechtsform == "Fakultatives Referendum"])$p.value,
+    shapiro.test(df_sub$diff_kanton[df_sub$rechtsform == "Volksinitiative"])$p.value,
+    shapiro.test(df_sub$diff_gemeinde[df_sub$rechtsform == "Fakultatives Referendum"])$p.value,
+    shapiro.test(df_sub$diff_gemeinde[df_sub$rechtsform == "Volksinitiative"])$p.value
+  )
+)
+
+print(results_shapiro)
+
+```
+
 #### Prüfung der Varianzhomogenität (Levene-Test)
 
 ```{r}
@@ -1887,6 +1882,38 @@ leveneTest(diff_state ~ rechtsform, data = df_sub)
 leveneTest(diff_kanton ~ rechtsform, data = df_sub)
 leveneTest(diff_gemeinde ~ rechtsform, data = df_sub)
 
+```
+
+##### Ergebnisse Levene-Test (Varianzhomogenität)
+
+```{r}
+
+# Ergebnisse in Liste schreiben
+results_levene <- tibble(Ebene = c("Staat", 
+                                   "Kanton",
+                                   "Gemeinde"),
+                         F_Wert = c(
+                           car::leveneTest(diff_state ~ rechtsform,
+                                           data = df_sub)[1,
+                                                          "F value"],
+                           car::leveneTest(diff_kanton ~ rechtsform,
+                                           data = df_sub)[1,
+                                                          "F value"],
+                           car::leveneTest(diff_gemeinde ~ rechtsform,
+                                           data = df_sub)[1,
+                                                          "F value"]),
+                         p_Wert = c(car::leveneTest(diff_state ~ rechtsform,
+                                                    data = df_sub)[1,
+                                                                   "Pr(>F)"],
+                                    car::leveneTest(diff_kanton ~ rechtsform,
+                                                    data = df_sub)[1,
+                                                                   "Pr(>F)"],
+                                    car::leveneTest(diff_gemeinde ~ rechtsform,
+                                                    data = df_sub)[1,
+                                                                   "Pr(>F)"]))
+
+# Tabelle anzeigen
+print(results_levene) 
 ```
 
 #### T-Test
@@ -1899,17 +1926,98 @@ t.test(diff_gemeinde ~ rechtsform, data = df_sub, var.equal = TRUE)
 
 ```
 
+##### Ergebnisse t-Test
+
+```{r}
+
+
+# Ergebnisse in Liste schreiben
+results_ttest <- tibble(Ebene = c("Staat",
+                                  "Gemeinde"),
+                        t_Wert = c(t.test(diff_state ~ rechtsform,
+                                          data = df_sub,
+                                          var.equal = TRUE)$statistic,
+                                   t.test(diff_gemeinde ~ rechtsform,
+                                          data = df_sub,
+                                          var.equal = TRUE)$statistic),
+                        df = c(t.test(diff_state ~ rechtsform,
+                                      data = df_sub,
+                                      var.equal = TRUE)$parameter,
+                               t.test(diff_gemeinde ~ rechtsform,
+                                      data = df_sub,
+                                     var.equal = TRUE)$parameter),
+                        p_Wert = c(t.test(diff_state ~ rechtsform,
+                                          data = df_sub,
+                                          var.equal = TRUE)$p.value,
+                                   t.test(diff_gemeinde ~ rechtsform,
+                                          data = df_sub,
+                                          var.equal = TRUE)$p.value),
+                        CI_lower = c(t.test(diff_state ~ rechtsform,
+                                            data = df_sub,
+                                            var.equal = TRUE)$conf.int[1],
+                                     t.test(diff_gemeinde ~ rechtsform,
+                                            data = df_sub,
+                                            var.equal = TRUE)$conf.int[1]),
+                        CI_upper = c(t.test(diff_state ~ rechtsform,
+                                            data = df_sub,
+                                            var.equal = TRUE)$conf.int[2],
+                                     t.test(diff_gemeinde ~ rechtsform,
+                                            data = df_sub,
+                                            var.equal = TRUE)$conf.int[2]),
+                        mean_FR = c(t.test(diff_state ~ rechtsform,
+                                           data = df_sub,
+                                           var.equal = TRUE)$estimate[1],
+                                    t.test(diff_gemeinde ~ rechtsform,
+                                           data = df_sub,
+                                           var.equal = TRUE)$estimate[1]),
+                        mean_VI = c(t.test(diff_state ~ rechtsform,
+                                           data = df_sub,
+                                           var.equal = TRUE)$estimate[2],
+                                    t.test(diff_gemeinde ~ rechtsform,
+                                           data = df_sub,
+                                           var.equal = TRUE)$estimate[2]))
+
+print(results_ttest)
+
+#view(results_ttest)
+
+```
+
 #### Mann-Whitney-U-Test / Wilcox
 
 ```{r}
 
-# wilcox.test(diff_state ~ rechtsform, data = df_sub)
-wilcox.test(diff_kanton ~ rechtsform, data = df_sub)
-# wilcox.test(diff_gemeinde ~ rechtsform, data = df_sub)
+# Wilcoxon-Test durchführen
+wilcox_kanton <- wilcox.test(diff_kanton ~ rechtsform,
+                             data = df_sub,
+                             exact = TRUE)
+
+# Mediane berechnen
+mediane <- df_sub %>%
+  group_by(rechtsform) %>%
+  summarise(Median = median(diff_kanton)) %>%
+  arrange(rechtsform)
+```
+
+##### Ergebnisse Mann-Whitney-U-Test / Wilcox
+
+```{r}
 
 
-# Mediane
-df_sub %>% group_by(rechtsform) %>% summarise(Median = median(diff_kanton))
+
+# Ergebnisse als Liste schreiben
+results_wilcox <- tibble(Ebene = "Kanton",
+                         Test = "Wilcoxon-Test",
+                         Teststatistik = wilcox_test$statistic,
+                         p_Wert = wilcox_test$p.value,
+                         Median_FR = mediane$Median[mediane$rechtsform ==
+                                                      "Fakultatives Referendum"],
+                         Median_VI = mediane$Median[mediane$rechtsform ==
+                                                      "Volksinitiative"])
+
+print(results_wilcox)
+
+view(results_wilcox)
 ```
 
 #### Tables Annahme & Ablehnung(Word)
@@ -2873,8 +2981,6 @@ print(doc, target = "result/Parties_Rating.docx")
 print(parties_rating)
 ```
 
-# BACKUP?!
-
 # Visualization
 
 ```{r}
@@ -2905,11 +3011,10 @@ ggplot(plot_data,
   geom_tile(color = "white") +
   scale_fill_manual(values = c("Nein" = "red", "Ja" = "green")) +
   labs(
-    title = "Heatmap der Abstimmungsergebnisse",
+    title = "Abstimmungsergebnisse",
     x = "Ergebnis",
     y = "Vorlage",
-    fill = "Annahme"
-  ) +
+    fill = "Annahme"  ) +
   theme_minimal() +
   theme(axis.text.y = element_text(size = 8))
 
@@ -2929,7 +3034,7 @@ ggplot(plot_data,
   geom_tile(color = "white") +
   scale_fill_manual(values = c("Nein" = "red", "Ja" = "green")) +
   labs(
-    title = "Heatmap der Abstimmungsergebnisse",
+    title = "Abstimmungsergebnisse nach Rechtsform",
     x = "Ergebnis",
     y = "Vorlage",
     fill = "Annahme"
@@ -2945,42 +3050,53 @@ ggplot(plot_data,
 
 ```{r}
 
-# Verteilung Ja/Nein/Keine pro Abstimmung - State - 2020
-# Tatsächliches Abstiummungsergebnis (annahme) auch abbilden
-# Split nach Staatsebene
-# tatsächliches Abstiummungsergebnis bei 0 (0) oder 100% (1) als PUnkt darstellen.
-# nicht nur state_parole_ sondern auch kt_parole_ und gemeinde_parole_ anzeigen.
+voting_5y_final %>% 
+  group_by(year) %>% 
+  summarise(anzahl_anr = n_distinct(anr))
 
+#    year anzahl_anr
+#   <dbl>      <int>    pixel height (200+50 je Zeile)
+# 1  2019          3    350
+# 2  2020          9    650
+# 3  2021         13    850
+# 4  2022         11    750
+# 5  2023          3    350
+# 6  2024         12    800
+# 7  2025          1    250
+
+
+voting_5y_final_reduced_data_table <- voting_5y_final %>%
+  select(anr, annahme, year, titel_kurz_d, contains("_parole_"))
+
+```
+
+```{r}
 ##DATUMSFILTER##
-jahr <- 2020
+jahr <- 2025
 
 # Daten für den Balkenplot vorbereiten (alle parole-Spalten, Quelle extrahieren)
-df_plot <- voting_5y_long_strength_wtd_summary %>%
+df_plot <- voting_5y_final %>%
   filter(year == jahr) %>%
   select(anr, matches("^(state|kt|gemeinde)_parole_")) %>%
-  pivot_longer(
-    cols = matches("^(state|kt|gemeinde)_parole_"),
-    names_to = "parole_typ",
-    values_to = "wert"
-  ) %>%
+  pivot_longer(cols = matches("^(state|kt|gemeinde)_parole_"),
+               names_to = "parole_typ",
+               values_to = "wert") %>%
   mutate(
     parole_quelle = case_when(
       grepl("^state_parole_", parole_typ) ~ "National- & Ständerat",
       grepl("^kt_parole_", parole_typ) ~ "Kantonsregierung*",
-      grepl("^gemeinde_parole_", parole_typ) ~ "Gemeinde*"
-    ),
+      grepl("^gemeinde_parole_", parole_typ) ~ "Gemeinde*"),
     parole_typ = case_when(
       grepl("_Nein$", parole_typ) ~ "Nein",
       grepl("_Ja$", parole_typ) ~ "Ja",
-      grepl("_Keine$", parole_typ) ~ "Keine"
-    ),
+      grepl("_Keine$", parole_typ) ~ "Keine"),
     anr = factor(anr, levels = unique(anr)),
     parole_quelle = factor(parole_quelle, levels = c("National- & Ständerat",
                                                      "Kantonsregierung*",
                                                      "Gemeinde*")))
 
 # Annahme-Daten für die Punkte vorbereiten
-df_annahme <- voting_5y_long_strength_wtd_summary %>%
+df_annahme <- voting_5y_final %>%
   filter(year == jahr) %>%
   select(anr, annahme) %>%
   mutate(
@@ -2990,75 +3106,37 @@ df_annahme <- voting_5y_long_strength_wtd_summary %>%
 
 # Plot mit Balken und Annahme-Punkt, getrennt nach parole_quelle
 ggplot() +
-  geom_bar(
-    data = df_plot,
-    mapping = aes(x = anr, y = wert, fill = parole_typ),
-    stat = "identity",
-    position = "fill",
-    width = 1) +
-  geom_point(
-    data = df_annahme,
-    mapping = aes(x = anr, y = annahme),
-    color = "black", size = 3) +
+  geom_bar(data = df_plot,
+           mapping = aes(x = anr,
+                         y = wert,
+                         fill = parole_typ),
+           stat = "identity",
+           position = "fill",
+           width = 1) +
+  geom_point(data = df_annahme,
+             mapping = aes(x = anr,
+                           y = annahme,
+                           shape = "Abstimmungsergebnis"),
+             color = "black", size = 3) +
+  scale_shape_manual(name = "",
+                     values = c("Abstimmungsergebnis" = 16)) +
   scale_y_continuous(labels = scales::percent_format()) +
   coord_flip() +
   facet_wrap(~ parole_quelle, ncol = 1, scales = "free_y") +
-  labs(
-    x = "Abstimmung (anr)",
-    y = "Anteil",
-    fill = "Parole",
-    title = paste("Verteilung Ja/Nein/Keine pro Abstimmung –", jahr),
-    subtitle = paste("* aggregiert, gewichtet nach Stimmberechtigten/Einwohner"),
-    caption = paste("Quelle: Eigene Berechnung")) +
+  labs(x = "Abstimmung (anr)",
+       y = "Anteil",
+       fill = "Parole",
+       title = paste("Verteilung Ja/Nein/Keine pro Abstimmung –",
+                     jahr),
+       subtitle = paste("* aggregiert, gewichtet nach Stimmberechtigten/Einwohner"),
+       caption = paste("Quelle: Dataframe ''voting_5y_final''")) +
+  geom_hline(yintercept = 0.5,
+             linetype = "dashed", color = "black") +
   theme_minimal() +
   scale_fill_manual(values = c("Ja" = "#66A61E",
-    "Keine" = "#BDBDBD",
-    "Nein" = "#D95F02"))
-  # scale_fill_brewer(palette = "Dark2")
-```
-
-```{r}
-
-# TODO: Nicht nur pro Jahr sondern auch Departement? Tatsächliche ja/nein/enthalten hinzufügen.
-```
-
-```{r}
-
-ggplot() +
-  geom_bar(
-    data = df_plot,
-    mapping = aes(x = anr, y = wert, fill = parole_typ),
-    stat = "identity",
-    position = "fill",
-    width = 1
-  ) +
-  geom_point(
-    data = df_annahme,
-    mapping = aes(x = anr, y = annahme, shape = "Abstimmungsergebnis"),
-    color = "black", size = 3
-  ) +
-  scale_shape_manual(
-    name = "", #Abstimmungsergebnis
-    values = c("Abstimmungsergebnis" = 16)
-  ) +
-  scale_fill_manual(
-    name = "Parolen:",
-    values = c("Ja" = "#66A61E", "Keine" = "#BDBDBD", "Nein" = "#D95F02")
-  ) +
+                               "Keine" = "#BDBDBD",
+                               "Nein" = "#D95F02")) +
   guides(
-    shape = guide_legend(order = 1),
-    fill  = guide_legend(order = 2)
-  ) +
-  scale_y_continuous(labels = scales::percent_format()) +
-  facet_wrap(~ parole_quelle, ncol = 1, scales = "free_y") +
-  labs(
-    x = "Abstimmung (anr)",
-    y = "Anteil",
-    title = paste("Verteilung Ja/Nein/Keine pro Abstimmung –", jahr),
-    subtitle = "* aggregiert, gewichtet nach Stimmberechtigten/Einwohner",
-    caption = "Quelle: Eigene Berechnung"
-  ) +
-  theme_minimal()+ theme(legend.position = "bottom",
-                          legend.text = element_text(size = 12),
-                          legend.title = element_text(size = 12))
+    fill = guide_legend(order = 1),
+    shape = guide_legend(order = 2)  )
 ```
