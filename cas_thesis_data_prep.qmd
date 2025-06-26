@@ -1132,7 +1132,6 @@ voting_raw <- voting_raw %>%
 voting_raw_5y <- voting_raw %>%
   filter(datum >= as.Date("2019-01-01"))
 
-
 # #TODO: Löschen, nicht benötigt?!
 # # Abstimmungsdaten der letzten 5 Jahre in Vektor schreiben für spätere Selektion
 # voting_5y_dates <- voting_5y %>%
@@ -1976,11 +1975,11 @@ format_table <- function(df) {
 
 
 # Tabelle 1: VARIANZ
-df1 <- head(summary_stats_v1)
+df1 <- head(summary_stats_v1, 10)
 ft1 <- format_table(df1)
 
 # Tabelle 2: VARIANZ Gruppiert nach Rechtsform
-df2 <- head(summary_stats_v2)
+df2 <- head(summary_stats_v2, 10)
 ft2 <- format_table(df2)
 
 
@@ -1993,7 +1992,7 @@ doc <- body_add_flextable(doc,
                           ft1)
 doc <- body_add_par(doc, "") # Leerzeile
 doc <- body_add_par(doc,
-                    "Mittlere Abweichung der Parolen vom Volksentscheid - Mit Standardabweichung. Gruppiert nach Departement.",
+                    "Mittlere Abweichung der Parolen vom Volksentscheid - Mit Standardabweichung. Gruppiert nach Rechtsform",
                     style = "heading 1")
 doc <- body_add_flextable(doc,
                           ft2)
@@ -2275,15 +2274,15 @@ print(cor_test_result_filtered)
 
 
 # VIF mit allen Variablen
-mod_vif <- lm(volkja_proz ~ 
-                diff_state + diff_kanton + diff_gemeinde +
-                state_parole_Ja + kt_parole_Ja + gemeinde_parole_Ja +
-                inserate_total + inserate_ja_pct + mediares_tot + mediaton_tot +
-                bet + nrja_pct + srja_pct,
-              data = voting_5y_final)
-vif(mod_vif)
+# mod_vif <- lm(volkja_proz ~ 
+#                 diff_state + diff_kanton + diff_gemeinde +
+#                 state_parole_Ja + kt_parole_Ja + gemeinde_parole_Ja +
+#                 inserate_total + inserate_ja_pct + mediares_tot + mediaton_tot +
+#                 bet + nrja_pct + srja_pct,
+#               data = voting_5y_final)
+# vif(mod_vif)
 
-alias(mod_vif)
+#alias(mod_vif)
 
 mod_vif_fixed <- lm(volkja_proz ~
                       # diff_state + diff_kanton + diff_gemeinde +
@@ -2305,7 +2304,7 @@ vif(mod_vif_fixed)
 ```{r}
 
 #SR und NR als Parlament zusammenfassen
-voting_5y_final <- str(voting_5y_final) %>%
+voting_5y_final <- voting_5y_final %>%
   mutate(parliament_ja_avg = (nrja_pct + srja_pct) / 2)
 
 # Modell state
@@ -2526,8 +2525,6 @@ for (name in names(model_list)) {
 ##### AIC, Pseudo-R² (McFadden) & AUC
 
 ```{r}
-
-
 
 # stepAIC() zu kombinieren
 models <- list(State = step_state,
@@ -2824,7 +2821,57 @@ fig
 
 ```
 
-# a
+### Tables Parties Rating
+
+```{r}
+
+# Funktion für identische Formatierung
+format_table <- function(df) {
+  # df[[1]] <- as.character(df[[1]])
+  # df[[3]] <- as.character(df[[3]])
+  ft <- flextable(df)
+  ft <- theme_vanilla(ft)
+  ft <- font(ft, fontname = "Courier New", part = "all")
+  ft <- fontsize(ft, size = 8, part = "all")
+  ft <- colformat_double(ft, digits = 2)
+  #ft <- colformat_double(ft, digits = 1, suffix = "%")
+  ft <- width(ft, j = 2, width = 2)
+  return(ft)
+}
+
+# Tabelle 1: Parties Rating
+df1 <- head(parties_rating, 8)
+ft1 <- format_table(df1)
+
+# # Tabelle 2: ABGELEHNT
+# df2 <- head(parties_rating)
+# ft2 <- format_table(df2)
+
+
+# Word-Dokument erstellen und beide Tabellen einfügen ---
+doc <- read_docx()
+doc <- body_add_par(doc,
+                    "Rating der Parteien",
+                    style = "heading 1")
+doc <- body_add_flextable(doc,
+                          ft1)
+# doc <- body_add_par(doc, "") # Leerzeile
+# doc <- body_add_par(doc,
+#                     "Ablehnung trotz fehlender Unterstützung durch Parolen",
+#                     style = "heading 1")
+# doc <- body_add_flextable(doc,
+#                           ft2)
+
+
+# Speichern 
+print(doc, target = "result/Parties_Rating.docx")
+
+
+
+print(parties_rating)
+```
+
+# BACKUP?!
 
 # Visualization
 
