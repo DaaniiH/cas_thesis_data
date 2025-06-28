@@ -42,6 +42,7 @@ library(flextable) # Tables for Word
 library(officer)   # Tables for Word
 library(effects)
 
+library(knitr)
 
 
 library(ggplot2)  # Diagrams
@@ -1677,6 +1678,8 @@ abgelehnt_ohne_nein_parole_50 <- abgelehnt %>%
          gemeinde_parole_Nein)
 
 print(abgelehnt_ohne_nein_parole_50)
+
+view(abgelehnt_ohne_nein_parole_50)
 ```
 
 ### Paradoxe Fälle
@@ -2003,13 +2006,11 @@ mediane <- df_sub %>%
 
 ```{r}
 
-
-
 # Ergebnisse als Liste schreiben
 results_wilcox <- tibble(Ebene = "Kanton",
                          Test = "Wilcoxon-Test",
-                         Teststatistik = wilcox_test$statistic,
-                         p_Wert = wilcox_test$p.value,
+                         Teststatistik = wilcox_kanton$statistic,
+                         p_Wert = wilcox_kanton$p.value,
                          Median_FR = mediane$Median[mediane$rechtsform ==
                                                       "Fakultatives Referendum"],
                          Median_VI = mediane$Median[mediane$rechtsform ==
@@ -2109,13 +2110,6 @@ doc <- body_add_flextable(doc,
 
 # Speichern 
 print(doc, target = "result/Varianz.docx")
-```
-
-#### Tables vergleichende Gruppenstatistik (Word)
-
-```{r}
-
-#Todo
 ```
 
 #### Plots - ÜBERARBEITEN
@@ -2270,10 +2264,7 @@ subset_corr <- voting_5y_final %>%
 # Erste Visualisierung: Streudiagrammmatrix
 pairs(subset_corr, main = "Streudiagrammmatrix der ausgewählten Variablen")
 
-
-
 # Prüfung auf Normalverteilung
-
 subset_corr_long <- pivot_longer(subset_corr, everything(), names_to = "Variable", values_to = "Wert")
 
 # Histogramme
@@ -2281,7 +2272,7 @@ ggplot(subset_corr_long, aes(x = Wert)) +
   geom_histogram(bins = 10, fill = "steelblue", color = "black") +
   facet_wrap(~ Variable, scales = "free") +
   theme_minimal() +
-  labs(title = "Histogramme der ausgewählten Variablen")
+  labs(title = "Histogramme ausgewählter Variablen")
 
 # QQ-Plots
 ggplot(subset_corr_long, aes(sample = Wert)) +
@@ -2296,7 +2287,35 @@ apply(subset_corr, 2, shapiro.test)
 
 
 
-# # Korrelationsmatrix berechnen
+```
+
+##### Ergebnisse Shapiro-Wilk-Test
+
+```{r}
+
+# Shapiro-Wilk-Tests für alle Variablen in subset_corr
+results_shapiro_vars <- lapply(subset_corr, shapiro.test)
+
+# In Dataframe umwandeln
+shapiro_df <- data.frame(
+  Variable = names(results_shapiro_vars),
+  W_Wert = sapply(results_shapiro_vars,
+                  function(x) round(x$statistic, 5)),
+  p_Wert = sapply(results_shapiro_vars,
+                  function(x) signif(x$p.value, 5)),
+  Normalverteilung = sapply(results_shapiro_vars,
+                            function(x) if (x$p.value < 0.05) "Nein" else "Ja"))
+
+# print/view
+print(shapiro_df)
+view(shapiro_df)
+
+```
+
+#### Korrelationsmatrix berechnen
+
+```{r}
+
 # # Pearson-Korrelation (für normalverteilte Variablen)
 # cor_matrix_pearson <- cor(subset_corr, use = "complete.obs", method = "pearson")
 # print(round(cor_matrix_pearson, 2))
@@ -2304,7 +2323,6 @@ apply(subset_corr, 2, shapiro.test)
 # Spearman-Korrelation (robuster bei Nicht-Normalverteilung)
 cor_matrix_spearman <- cor(subset_corr, use = "complete.obs", method = "spearman")
 print(round(cor_matrix_spearman, 2))
-
 
 
 #Visualisierung der Korrelationsmatrix
@@ -2332,16 +2350,9 @@ corrplot(cor_matrix_spearman, method = "color", addCoef.col = "black", tl.col = 
 # ggcorrplot(cor_matrix_spearman, lab = TRUE)
 
 
-
-
-#Hier WEITERARBEITEN 
-
 # Signifikanz einzelner Korrelationen prüfen
 # cor.test(voting_5y_final$diff_state, voting_5y_final$volkja_proz, method = "pearson")
 cor.test(voting_5y_final$diff_kanton, voting_5y_final$inserate_ja_pct, method = "spearman")
-
-
-
 
 # Zielvariablen
 target_vars <- c("annahme",
@@ -2377,10 +2388,9 @@ cor_test_result_filtered <- cor_test_result %>%
           desc(abs(rho)))
 
 
-#TODO word print..
-# Ergebnis anzeigen
 print(cor_test_result_filtered)
 
+view(cor_test_result_filtered)
 
 
 # VIF mit allen Variablen
@@ -2402,6 +2412,7 @@ mod_vif_fixed <- lm(volkja_proz ~
                     data = voting_5y_final)
 
 vif(mod_vif_fixed)
+
 
 ```
 
@@ -2472,7 +2483,6 @@ model_stats <- lapply(model_list, function(mod) {
 # In Dataframe umwandeln
 model_stats_df <- do.call(rbind, model_stats)
 print(round(model_stats_df, 3))
-
 ```
 
 #### Visualisierung der Modellgüte
@@ -2582,6 +2592,44 @@ vif(mod_log_parliament)
 
 ```
 
+##### Ergebnisse vif()
+
+```{r}
+
+
+# VIF-Werte für jedes Modell berechnen
+vif_gemeinde   <- vif(mod_log_gemeinde) %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("Prädiktor")
+vif_kanton     <- vif(mod_log_kanton) %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("Prädiktor")
+vif_state      <- vif(mod_log_state) %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("Prädiktor")
+vif_parliament <- vif(mod_log_parliament) %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("Prädiktor")
+
+# Modellnamen hinzufügen
+vif_gemeinde$Modell   <- "Gemeindeparole"
+vif_kanton$Modell     <- "Kantonsparole"
+vif_state$Modell      <- "Staatsparole"
+vif_parliament$Modell <- "Parlamentsparole"
+
+# Alle zusammenführen
+vif_all <- bind_rows(vif_gemeinde, vif_kanton, vif_state, vif_parliament) %>%
+  select(Modell, Prädiktor, GVIF, Df, `GVIF^(1/(2*Df))`)
+
+view(vif_all)
+
+# Tabelle schön ausgeben
+kable(vif_all,
+      digits = 2,
+      caption = "GVIF-Werte der Prädiktoren in den logistischen Regressionsmodellen")
+
+```
+
 #### stepAIC für Modellauswahl
 
 ```{r}
@@ -2676,6 +2724,7 @@ summary_df <- data.frame(
 
 # Ausgabe
 print(summary_df)
+view(summary_df)
 
 ```
 
@@ -2685,7 +2734,9 @@ print(summary_df)
 
 
 exp(coef(step_state))  # Odds Ratios
+view(exp(coef(step_state)))
 summary(step_state)    # p-Werte und Interpretation
+
 
 exp(coef(step_kanton))  # Odds Ratios
 summary(step_kanton)    # p-Werte und Interpretation
@@ -3071,8 +3122,447 @@ voting_5y_final_reduced_data_table <- voting_5y_final %>%
 ```
 
 ```{r}
+
 ##DATUMSFILTER##
 jahr <- 2025
+
+# Daten für den Balkenplot vorbereiten (alle parole-Spalten, Quelle extrahieren)
+df_plot <- voting_5y_final %>%
+  filter(year == jahr) %>%
+  select(anr, matches("^(state|kt|gemeinde)_parole_")) %>%
+  pivot_longer(cols = matches("^(state|kt|gemeinde)_parole_"),
+               names_to = "parole_typ",
+               values_to = "wert") %>%
+  mutate(
+    parole_quelle = case_when(
+      grepl("^state_parole_", parole_typ) ~ "National- & Ständerat",
+      grepl("^kt_parole_", parole_typ) ~ "Kantonsregierung*",
+      grepl("^gemeinde_parole_", parole_typ) ~ "Gemeinde*"),
+    parole_typ = case_when(
+      grepl("_Nein$", parole_typ) ~ "Nein",
+      grepl("_Ja$", parole_typ) ~ "Ja",
+      grepl("_Keine$", parole_typ) ~ "Keine"),
+    anr = factor(anr, levels = unique(anr)),
+    parole_quelle = factor(parole_quelle, levels = c("National- & Ständerat",
+                                                     "Kantonsregierung*",
+                                                     "Gemeinde*")))
+
+# Annahme-Daten für die Punkte vorbereiten
+df_annahme <- voting_5y_final %>%
+  filter(year == jahr) %>%
+  select(anr, annahme) %>%
+  mutate(
+    anr = factor(anr, levels = unique(df_plot$anr)),
+    annahme = as.numeric(annahme) # Annahme: 0 oder 1
+  )
+
+# Plot mit Balken und Annahme-Punkt, getrennt nach parole_quelle
+ggplot() +
+  geom_bar(data = df_plot,
+           mapping = aes(x = anr,
+                         y = wert,
+                         fill = parole_typ),
+           stat = "identity",
+           position = "fill",
+           width = 1) +
+  geom_point(data = df_annahme,
+             mapping = aes(x = anr,
+                           y = annahme,
+                           shape = "Abstimmungsergebnis"),
+             color = "black", size = 3) +
+  scale_shape_manual(name = "",
+                     values = c("Abstimmungsergebnis" = 16)) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  coord_flip() +
+  facet_wrap(~ parole_quelle, ncol = 1, scales = "free_y") +
+  labs(x = "Abstimmung (anr)",
+       y = "Anteil",
+       fill = "Parole",
+       title = paste("Verteilung Ja/Nein/Keine pro Abstimmung –",
+                     jahr),
+       subtitle = paste("* aggregiert, gewichtet nach Stimmberechtigten/Einwohner"),
+       caption = paste("Quelle: Dataframe ''voting_5y_final''")) +
+  geom_hline(yintercept = 0.5,
+             linetype = "dashed", color = "black") +
+  theme_minimal() +
+  scale_fill_manual(values = c("Ja" = "#66A61E",
+                               "Keine" = "#BDBDBD",
+                               "Nein" = "#D95F02")) +
+  guides(
+    fill = guide_legend(order = 1),
+    shape = guide_legend(order = 2)  )
+```
+
+```{r}
+{r}
+
+##DATUMSFILTER##
+jahr <- 2024
+
+# Daten für den Balkenplot vorbereiten (alle parole-Spalten, Quelle extrahieren)
+df_plot <- voting_5y_final %>%
+  filter(year == jahr) %>%
+  select(anr, matches("^(state|kt|gemeinde)_parole_")) %>%
+  pivot_longer(cols = matches("^(state|kt|gemeinde)_parole_"),
+               names_to = "parole_typ",
+               values_to = "wert") %>%
+  mutate(
+    parole_quelle = case_when(
+      grepl("^state_parole_", parole_typ) ~ "National- & Ständerat",
+      grepl("^kt_parole_", parole_typ) ~ "Kantonsregierung*",
+      grepl("^gemeinde_parole_", parole_typ) ~ "Gemeinde*"),
+    parole_typ = case_when(
+      grepl("_Nein$", parole_typ) ~ "Nein",
+      grepl("_Ja$", parole_typ) ~ "Ja",
+      grepl("_Keine$", parole_typ) ~ "Keine"),
+    anr = factor(anr, levels = unique(anr)),
+    parole_quelle = factor(parole_quelle, levels = c("National- & Ständerat",
+                                                     "Kantonsregierung*",
+                                                     "Gemeinde*")))
+
+# Annahme-Daten für die Punkte vorbereiten
+df_annahme <- voting_5y_final %>%
+  filter(year == jahr) %>%
+  select(anr, annahme) %>%
+  mutate(
+    anr = factor(anr, levels = unique(df_plot$anr)),
+    annahme = as.numeric(annahme) # Annahme: 0 oder 1
+  )
+
+# Plot mit Balken und Annahme-Punkt, getrennt nach parole_quelle
+ggplot() +
+  geom_bar(data = df_plot,
+           mapping = aes(x = anr,
+                         y = wert,
+                         fill = parole_typ),
+           stat = "identity",
+           position = "fill",
+           width = 1) +
+  geom_point(data = df_annahme,
+             mapping = aes(x = anr,
+                           y = annahme,
+                           shape = "Abstimmungsergebnis"),
+             color = "black", size = 3) +
+  scale_shape_manual(name = "",
+                     values = c("Abstimmungsergebnis" = 16)) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  coord_flip() +
+  facet_wrap(~ parole_quelle, ncol = 1, scales = "free_y") +
+  labs(x = "Abstimmung (anr)",
+       y = "Anteil",
+       fill = "Parole",
+       title = paste("Verteilung Ja/Nein/Keine pro Abstimmung –",
+                     jahr),
+       subtitle = paste("* aggregiert, gewichtet nach Stimmberechtigten/Einwohner"),
+       caption = paste("Quelle: Dataframe ''voting_5y_final''")) +
+  geom_hline(yintercept = 0.5,
+             linetype = "dashed", color = "black") +
+  theme_minimal() +
+  scale_fill_manual(values = c("Ja" = "#66A61E",
+                               "Keine" = "#BDBDBD",
+                               "Nein" = "#D95F02")) +
+  guides(
+    fill = guide_legend(order = 1),
+    shape = guide_legend(order = 2)  )
+```
+
+```{r}
+{r}
+
+##DATUMSFILTER##
+jahr <- 2023
+
+# Daten für den Balkenplot vorbereiten (alle parole-Spalten, Quelle extrahieren)
+df_plot <- voting_5y_final %>%
+  filter(year == jahr) %>%
+  select(anr, matches("^(state|kt|gemeinde)_parole_")) %>%
+  pivot_longer(cols = matches("^(state|kt|gemeinde)_parole_"),
+               names_to = "parole_typ",
+               values_to = "wert") %>%
+  mutate(
+    parole_quelle = case_when(
+      grepl("^state_parole_", parole_typ) ~ "National- & Ständerat",
+      grepl("^kt_parole_", parole_typ) ~ "Kantonsregierung*",
+      grepl("^gemeinde_parole_", parole_typ) ~ "Gemeinde*"),
+    parole_typ = case_when(
+      grepl("_Nein$", parole_typ) ~ "Nein",
+      grepl("_Ja$", parole_typ) ~ "Ja",
+      grepl("_Keine$", parole_typ) ~ "Keine"),
+    anr = factor(anr, levels = unique(anr)),
+    parole_quelle = factor(parole_quelle, levels = c("National- & Ständerat",
+                                                     "Kantonsregierung*",
+                                                     "Gemeinde*")))
+
+# Annahme-Daten für die Punkte vorbereiten
+df_annahme <- voting_5y_final %>%
+  filter(year == jahr) %>%
+  select(anr, annahme) %>%
+  mutate(
+    anr = factor(anr, levels = unique(df_plot$anr)),
+    annahme = as.numeric(annahme) # Annahme: 0 oder 1
+  )
+
+# Plot mit Balken und Annahme-Punkt, getrennt nach parole_quelle
+ggplot() +
+  geom_bar(data = df_plot,
+           mapping = aes(x = anr,
+                         y = wert,
+                         fill = parole_typ),
+           stat = "identity",
+           position = "fill",
+           width = 1) +
+  geom_point(data = df_annahme,
+             mapping = aes(x = anr,
+                           y = annahme,
+                           shape = "Abstimmungsergebnis"),
+             color = "black", size = 3) +
+  scale_shape_manual(name = "",
+                     values = c("Abstimmungsergebnis" = 16)) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  coord_flip() +
+  facet_wrap(~ parole_quelle, ncol = 1, scales = "free_y") +
+  labs(x = "Abstimmung (anr)",
+       y = "Anteil",
+       fill = "Parole",
+       title = paste("Verteilung Ja/Nein/Keine pro Abstimmung –",
+                     jahr),
+       subtitle = paste("* aggregiert, gewichtet nach Stimmberechtigten/Einwohner"),
+       caption = paste("Quelle: Dataframe ''voting_5y_final''")) +
+  geom_hline(yintercept = 0.5,
+             linetype = "dashed", color = "black") +
+  theme_minimal() +
+  scale_fill_manual(values = c("Ja" = "#66A61E",
+                               "Keine" = "#BDBDBD",
+                               "Nein" = "#D95F02")) +
+  guides(
+    fill = guide_legend(order = 1),
+    shape = guide_legend(order = 2)  )
+```
+
+```{r}
+{r}
+
+##DATUMSFILTER##
+jahr <- 2022
+
+# Daten für den Balkenplot vorbereiten (alle parole-Spalten, Quelle extrahieren)
+df_plot <- voting_5y_final %>%
+  filter(year == jahr) %>%
+  select(anr, matches("^(state|kt|gemeinde)_parole_")) %>%
+  pivot_longer(cols = matches("^(state|kt|gemeinde)_parole_"),
+               names_to = "parole_typ",
+               values_to = "wert") %>%
+  mutate(
+    parole_quelle = case_when(
+      grepl("^state_parole_", parole_typ) ~ "National- & Ständerat",
+      grepl("^kt_parole_", parole_typ) ~ "Kantonsregierung*",
+      grepl("^gemeinde_parole_", parole_typ) ~ "Gemeinde*"),
+    parole_typ = case_when(
+      grepl("_Nein$", parole_typ) ~ "Nein",
+      grepl("_Ja$", parole_typ) ~ "Ja",
+      grepl("_Keine$", parole_typ) ~ "Keine"),
+    anr = factor(anr, levels = unique(anr)),
+    parole_quelle = factor(parole_quelle, levels = c("National- & Ständerat",
+                                                     "Kantonsregierung*",
+                                                     "Gemeinde*")))
+
+# Annahme-Daten für die Punkte vorbereiten
+df_annahme <- voting_5y_final %>%
+  filter(year == jahr) %>%
+  select(anr, annahme) %>%
+  mutate(
+    anr = factor(anr, levels = unique(df_plot$anr)),
+    annahme = as.numeric(annahme) # Annahme: 0 oder 1
+  )
+
+# Plot mit Balken und Annahme-Punkt, getrennt nach parole_quelle
+ggplot() +
+  geom_bar(data = df_plot,
+           mapping = aes(x = anr,
+                         y = wert,
+                         fill = parole_typ),
+           stat = "identity",
+           position = "fill",
+           width = 1) +
+  geom_point(data = df_annahme,
+             mapping = aes(x = anr,
+                           y = annahme,
+                           shape = "Abstimmungsergebnis"),
+             color = "black", size = 3) +
+  scale_shape_manual(name = "",
+                     values = c("Abstimmungsergebnis" = 16)) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  coord_flip() +
+  facet_wrap(~ parole_quelle, ncol = 1, scales = "free_y") +
+  labs(x = "Abstimmung (anr)",
+       y = "Anteil",
+       fill = "Parole",
+       title = paste("Verteilung Ja/Nein/Keine pro Abstimmung –",
+                     jahr),
+       subtitle = paste("* aggregiert, gewichtet nach Stimmberechtigten/Einwohner"),
+       caption = paste("Quelle: Dataframe ''voting_5y_final''")) +
+  geom_hline(yintercept = 0.5,
+             linetype = "dashed", color = "black") +
+  theme_minimal() +
+  scale_fill_manual(values = c("Ja" = "#66A61E",
+                               "Keine" = "#BDBDBD",
+                               "Nein" = "#D95F02")) +
+  guides(
+    fill = guide_legend(order = 1),
+    shape = guide_legend(order = 2)  )
+```
+
+```{r}
+{r}
+
+##DATUMSFILTER##
+jahr <- 2021
+
+# Daten für den Balkenplot vorbereiten (alle parole-Spalten, Quelle extrahieren)
+df_plot <- voting_5y_final %>%
+  filter(year == jahr) %>%
+  select(anr, matches("^(state|kt|gemeinde)_parole_")) %>%
+  pivot_longer(cols = matches("^(state|kt|gemeinde)_parole_"),
+               names_to = "parole_typ",
+               values_to = "wert") %>%
+  mutate(
+    parole_quelle = case_when(
+      grepl("^state_parole_", parole_typ) ~ "National- & Ständerat",
+      grepl("^kt_parole_", parole_typ) ~ "Kantonsregierung*",
+      grepl("^gemeinde_parole_", parole_typ) ~ "Gemeinde*"),
+    parole_typ = case_when(
+      grepl("_Nein$", parole_typ) ~ "Nein",
+      grepl("_Ja$", parole_typ) ~ "Ja",
+      grepl("_Keine$", parole_typ) ~ "Keine"),
+    anr = factor(anr, levels = unique(anr)),
+    parole_quelle = factor(parole_quelle, levels = c("National- & Ständerat",
+                                                     "Kantonsregierung*",
+                                                     "Gemeinde*")))
+
+# Annahme-Daten für die Punkte vorbereiten
+df_annahme <- voting_5y_final %>%
+  filter(year == jahr) %>%
+  select(anr, annahme) %>%
+  mutate(
+    anr = factor(anr, levels = unique(df_plot$anr)),
+    annahme = as.numeric(annahme) # Annahme: 0 oder 1
+  )
+
+# Plot mit Balken und Annahme-Punkt, getrennt nach parole_quelle
+ggplot() +
+  geom_bar(data = df_plot,
+           mapping = aes(x = anr,
+                         y = wert,
+                         fill = parole_typ),
+           stat = "identity",
+           position = "fill",
+           width = 1) +
+  geom_point(data = df_annahme,
+             mapping = aes(x = anr,
+                           y = annahme,
+                           shape = "Abstimmungsergebnis"),
+             color = "black", size = 3) +
+  scale_shape_manual(name = "",
+                     values = c("Abstimmungsergebnis" = 16)) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  coord_flip() +
+  facet_wrap(~ parole_quelle, ncol = 1, scales = "free_y") +
+  labs(x = "Abstimmung (anr)",
+       y = "Anteil",
+       fill = "Parole",
+       title = paste("Verteilung Ja/Nein/Keine pro Abstimmung –",
+                     jahr),
+       subtitle = paste("* aggregiert, gewichtet nach Stimmberechtigten/Einwohner"),
+       caption = paste("Quelle: Dataframe ''voting_5y_final''")) +
+  geom_hline(yintercept = 0.5,
+             linetype = "dashed", color = "black") +
+  theme_minimal() +
+  scale_fill_manual(values = c("Ja" = "#66A61E",
+                               "Keine" = "#BDBDBD",
+                               "Nein" = "#D95F02")) +
+  guides(
+    fill = guide_legend(order = 1),
+    shape = guide_legend(order = 2)  )
+```
+
+```{r}
+{r}
+
+##DATUMSFILTER##
+jahr <- 2020
+
+# Daten für den Balkenplot vorbereiten (alle parole-Spalten, Quelle extrahieren)
+df_plot <- voting_5y_final %>%
+  filter(year == jahr) %>%
+  select(anr, matches("^(state|kt|gemeinde)_parole_")) %>%
+  pivot_longer(cols = matches("^(state|kt|gemeinde)_parole_"),
+               names_to = "parole_typ",
+               values_to = "wert") %>%
+  mutate(
+    parole_quelle = case_when(
+      grepl("^state_parole_", parole_typ) ~ "National- & Ständerat",
+      grepl("^kt_parole_", parole_typ) ~ "Kantonsregierung*",
+      grepl("^gemeinde_parole_", parole_typ) ~ "Gemeinde*"),
+    parole_typ = case_when(
+      grepl("_Nein$", parole_typ) ~ "Nein",
+      grepl("_Ja$", parole_typ) ~ "Ja",
+      grepl("_Keine$", parole_typ) ~ "Keine"),
+    anr = factor(anr, levels = unique(anr)),
+    parole_quelle = factor(parole_quelle, levels = c("National- & Ständerat",
+                                                     "Kantonsregierung*",
+                                                     "Gemeinde*")))
+
+# Annahme-Daten für die Punkte vorbereiten
+df_annahme <- voting_5y_final %>%
+  filter(year == jahr) %>%
+  select(anr, annahme) %>%
+  mutate(
+    anr = factor(anr, levels = unique(df_plot$anr)),
+    annahme = as.numeric(annahme) # Annahme: 0 oder 1
+  )
+
+# Plot mit Balken und Annahme-Punkt, getrennt nach parole_quelle
+ggplot() +
+  geom_bar(data = df_plot,
+           mapping = aes(x = anr,
+                         y = wert,
+                         fill = parole_typ),
+           stat = "identity",
+           position = "fill",
+           width = 1) +
+  geom_point(data = df_annahme,
+             mapping = aes(x = anr,
+                           y = annahme,
+                           shape = "Abstimmungsergebnis"),
+             color = "black", size = 3) +
+  scale_shape_manual(name = "",
+                     values = c("Abstimmungsergebnis" = 16)) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  coord_flip() +
+  facet_wrap(~ parole_quelle, ncol = 1, scales = "free_y") +
+  labs(x = "Abstimmung (anr)",
+       y = "Anteil",
+       fill = "Parole",
+       title = paste("Verteilung Ja/Nein/Keine pro Abstimmung –",
+                     jahr),
+       subtitle = paste("* aggregiert, gewichtet nach Stimmberechtigten/Einwohner"),
+       caption = paste("Quelle: Dataframe ''voting_5y_final''")) +
+  geom_hline(yintercept = 0.5,
+             linetype = "dashed", color = "black") +
+  theme_minimal() +
+  scale_fill_manual(values = c("Ja" = "#66A61E",
+                               "Keine" = "#BDBDBD",
+                               "Nein" = "#D95F02")) +
+  guides(
+    fill = guide_legend(order = 1),
+    shape = guide_legend(order = 2)  )
+```
+
+```{r}
+{r}
+
+##DATUMSFILTER##
+jahr <- 2019
 
 # Daten für den Balkenplot vorbereiten (alle parole-Spalten, Quelle extrahieren)
 df_plot <- voting_5y_final %>%
