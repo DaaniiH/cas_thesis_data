@@ -28,42 +28,40 @@ theme: bootstrap
 ```{r}
 #| label: load_libraries
 
-library(readr)
-library(readxl)
-library(pxmake)   # to load PX files
-library(pxR)      # to load PX files
-library(jsonlite) # to load JSON files
-
+library(readr)      # load data
+library(readxl)     # load Excel files
+library(pxmake)     # load PX files
+library(pxR)        # load PX files
+library(jsonlite)   # load JSON files
 library(purrr)
-
-library(writexl)  # Write Excel files
-
-library(flextable) # Tables for Word
-library(officer)   # Tables for Word
+library(writexl)    # Write Excel files
+library(flextable)  # Tables for Word
+library(officer)    # Tables for Word
 library(effects)
-
-library(knitr)
-
-
-library(ggplot2)  # Diagrams
-library(ggforce)  # Diagrams
-library(corrplot) # Korrelation
-library(ggcorrplot)
+library(knitr)      # Datatable
+library(ggplot2)    # Diagrams
+library(ggforce)    # Diagrams
+library(corrplot)   # Korrelation
+library(ggcorrplot) # Korrelation / Plot
 library(reshape2)
 library(car)
 library(e1071)
 library(MASS)
 library(pscl)
 library(pROC)
-library(GGally)   # Diagrams / Korrelation
-library(plotly)   # Diagrams
+library(GGally)     # Diagrams / Korrelation
+library(plotly)     # Diagrams
+library(DT)         # datatable()
+library(sf)
+library(leaflet)
+library(leaflet.minicharts)
+library(osmdata)
 
-library(DT)       # datatable()
-
+# am Schluss laden, u.a. select() aus dplyr greift sonst auf falsche Library
 library(DescTools)
 library(tidyr)
 library(tidyverse)
-library(dplyr)    # am Schluss laden, u.a. select() greift sonst aufs falsche
+library(dplyr)      
 ```
 
 # Functions
@@ -1925,7 +1923,6 @@ results_ttest <- tibble(Ebene = c("Staat",
 print(results_ttest)
 
 #view(results_ttest)
-
 ```
 
 #### Mann-Whitney-U-Test / Wilcox
@@ -1962,7 +1959,7 @@ results_wilcox <- tibble(Ebene = "Kanton",
 
 print(results_wilcox)
 
-view(results_wilcox)
+# view(results_wilcox)
 ```
 
 #### Tables Annahme & Ablehnung(Word)
@@ -2058,7 +2055,7 @@ doc <- body_add_flextable(doc,
 print(doc, target = "result/Varianz.docx")
 ```
 
-#### Plots 
+#### Plots
 
 ```{r}
 #| label: full_view_annahme_ablehnung
@@ -2253,8 +2250,7 @@ shapiro_df <- data.frame(
 
 # print/view
 print(shapiro_df)
-view(shapiro_df)
-
+# view(shapiro_df)
 ```
 
 #### Korrelationsmatrix berechnen
@@ -2335,7 +2331,7 @@ cor_test_result_filtered <- cor_test_result %>%
 
 print(cor_test_result_filtered)
 
-view(cor_test_result_filtered)
+# view(cor_test_result_filtered)
 
 
 # VIF mit allen Variablen
@@ -2357,8 +2353,6 @@ mod_vif_fixed <- lm(volkja_proz ~
                     data = voting_5y_final)
 
 vif(mod_vif_fixed)
-
-
 ```
 
 ## Modelllierung
@@ -2424,7 +2418,6 @@ model_stats <- lapply(model_list, function(mod) {
 })
 
 
-#TODO Table Word
 # In Dataframe umwandeln
 model_stats_df <- do.call(rbind, model_stats)
 print(round(model_stats_df, 3))
@@ -2566,7 +2559,7 @@ vif_parliament$Modell <- "Parlamentsparole"
 vif_all <- bind_rows(vif_gemeinde, vif_kanton, vif_state, vif_parliament) %>%
   select(Modell, Prädiktor, GVIF, Df, `GVIF^(1/(2*Df))`)
 
-view(vif_all)
+print(vif_all)
 
 # Tabelle schön ausgeben
 kable(vif_all,
@@ -2669,8 +2662,7 @@ summary_df <- data.frame(
 
 # Ausgabe
 print(summary_df)
-view(summary_df)
-
+# view(summary_df)
 ```
 
 #### Odds-ratios und p-Werte interpretieren
@@ -2980,6 +2972,183 @@ print(doc, target = "result/Parties_Rating.docx")
 
 
 print(parties_rating)
+```
+
+#### Politische Ausrichtung je Gemeinde bzw. "statistische Städte")
+
+ACHTUNG: Vergleichsweise "Rechen- und Speicherplatzintensiv".
+
+Darstellung des Zwei-Achsen-Modells je statistischer Stadt auf der Landkarte
+
+```{r}
+
+ortschaftenverzeichnis <- read_delim("data/geodata/AMTOVZ_CSV_WGS84.csv",
+                                     delim = ";",
+                                     escape_double = FALSE,
+                                     trim_ws = TRUE) 
+
+
+# Datensätze ("Parteien/Mandate & Position in Parteilandschaft) zusammenführen
+elec_joined <- elec_gemeinde_lvl_gemeinde %>%
+  left_join(parties_rating %>% select(Partei,
+                                      eco_x,
+                                      socio_y),
+            by = c("Partei" = "Partei"))
+
+# Gewichtung nach Parteistärke je Gemeinde um jeweils einen Punkt im Koordinatensystem zu erhalten
+elec_joined_weighted <- elec_joined %>%
+  mutate(eco_weighted = n_seats_pct * eco_x,
+         socio_weighted = n_seats_pct * socio_y) %>%
+  group_by(year, Gemeinde) %>%
+  summarise(eco = sum(eco_weighted, na.rm = TRUE) / sum(n_seats_pct,
+                                                        na.rm = TRUE),
+            socio = sum(socio_weighted, na.rm = TRUE) / sum(n_seats_pct,
+                                                            na.rm = TRUE)) %>%
+  ungroup()
+
+# Koordinaten hinzufügen
+elec_joined_weighted_with_coords <- elec_joined_weighted %>%
+  mutate(Gemeinde = case_when(
+      Gemeinde == "Aesch (BL)"        ~ "Aesch BL",
+      Gemeinde == "Altdorf (UR)"      ~ "Altdorf UR",
+      Gemeinde == "Altstätten"        ~ "Altstätten SG",
+      Gemeinde == "Brig-Glis"         ~ "Brig",
+      Gemeinde == "Brugg"             ~ "Brugg AG",
+      Gemeinde == "Buchs (SG)"        ~ "Buchs SG",
+      Gemeinde == "Carouge (GE)"      ~ "Carouge GE",
+      Gemeinde == "Davos"             ~ "Davos Dorf",
+      Gemeinde == "Ecublens (VD)"     ~ "Ecublens VD",
+      Gemeinde == "Glarus Nord"       ~ "Glarus",
+      Gemeinde == "Gossau (SG)"       ~ "Gossau SG",
+      Gemeinde == "Illnau-Effretikon" ~ "Illnau",
+      Gemeinde == "Küsnacht (ZH)"     ~ "Küsnacht ZH",
+      Gemeinde == "Lancy"             ~ "Grand-Lancy",
+      Gemeinde == "Muri bei Bern"     ~ "Muri b. Bern",
+      Gemeinde == "Oberwil (BL)"      ~ "Oberwil BL",
+      Gemeinde == "Pfäffikon"         ~ "Pfäffikon SZ",
+      Gemeinde == "Rapperswil-Jona"   ~ "Rapperswil SG",
+      Gemeinde == "Reinach (BL)"      ~ "Reinach BL",
+      Gemeinde == "Renens (VD)"       ~ "Renens VD",
+      Gemeinde == "Rüti (ZH)"         ~ "Rüti ZH",
+      Gemeinde == "Wetzikon (ZH)"     ~ "Wetzikon ZH",
+      Gemeinde == "Wil (SG)"          ~ "Wil SG",
+      Gemeinde == "Wohlen (AG)"       ~ "Wohlen AG",
+      Gemeinde == "Lachen"            ~ "Lachen SZ",
+      TRUE                            ~ Gemeinde)) %>% 
+  left_join(ortschaftenverzeichnis %>%
+              select(Ortschaftsname, E, N),
+            by = c("Gemeinde" = "Ortschaftsname"),
+            relationship = "many-to-many") %>%
+  group_by(year, Gemeinde, eco, socio) %>%
+  summarise(E = mean(E, na.rm = TRUE),
+            N = mean(N, na.rm = TRUE),
+            .groups = "drop")
+
+print(elec_joined_weighted_with_coords)
+
+gemeinden_ohne_coords_df <- elec_joined_weighted_with_coords %>%
+  filter(is.na(E) | is.na(N)) %>%
+  distinct(Gemeinde) %>% 
+  print(n=Inf)
+
+print(gemeinden_ohne_coords_df)
+```
+
+```{r}
+
+# Daten vorbereiten
+map_data <- elec_joined_weighted_with_coords %>%
+  filter(!is.na(E),
+         !is.na(N))
+  #       Gemeinde %in% c("Winterthur", "Zürich"))
+
+# Hilfsfunktion für Dateinamen (keine Sonderzeichen)
+safe_name <- function(x) gsub("[^A-Za-z0-9]", "_", x)
+
+# Farbpalette für Leaflet-Legende vorbereiten
+all_years <- sort(unique(elec_joined_weighted_with_coords$year))
+min_year <- min(all_years)
+max_year <- max(all_years)
+pal <- colorNumeric(palette = colorRampPalette(c("grey80", "navy"))(256),
+                    domain = c(min_year, max_year))
+
+# Mini-Plots als PNG erzeugen (mit halbtransparenter weißer Fläche)
+dir.create("mini_plots",
+           showWarnings = FALSE)
+pb <- txtProgressBar(min = 0,
+                     max = nrow(map_data),
+                     style = 3)
+
+for (i in seq_len(nrow(map_data))) {
+  # Alle Jahre für diese Gemeinde auswählen
+  df_gemeinde <- elec_joined_weighted_with_coords %>%
+    filter(Gemeinde == map_data$Gemeinde[i],
+           !is.na(eco),
+           !is.na(socio),
+           !is.na(year))
+
+  g <- ggplot(df_gemeinde,
+              aes(x = eco, y = socio, color = year)) +
+    geom_point(size = 12) +
+    geom_vline(xintercept = 50, linetype = "dashed", color = "blue", size = 2) +
+    geom_hline(yintercept = 50, linetype = "dashed", color = "blue", size = 2) +
+    scale_x_continuous(limits = c(0, 100), expand = c(0,0),
+                       labels = function(x) paste0(x, "%")) +
+    scale_y_continuous(limits = c(0, 100), expand = c(0,0),
+                       labels = function(x) paste0(x, "%")) +
+    scale_color_gradient(low = "grey80", high = "navy",
+                         name = "Jahr",
+                         limits = c(min_year, max_year)) +
+    labs(x = "Wirtschaftspolitisch",
+         y = "Gesellschaftspolitisch") +
+    theme_minimal(base_size = 28) +
+    theme(panel.background = element_rect(fill = rgb(1, 1, 1, 0.1),
+                                          color = NA),  # 10 % transparent weiss
+          plot.background = element_rect(fill = "transparent", color = NA),
+          axis.title = element_text(size = 48),
+          axis.text = element_text(size = 28),
+          axis.line = element_line(size = 2),
+          legend.position = "none",  # Legende AUS
+          panel.grid = element_blank(),
+          plot.margin = margin(8, 8, 8, 8, "pt"))
+  ggsave(filename = sprintf("mini_plots/%s.png",
+                            safe_name(map_data$Gemeinde[i])),
+         plot = g,
+         width = 10, height = 10,
+         units = "in", bg = "transparent", dpi = 540)
+  setTxtProgressBar(pb, i)}
+close(pb)
+
+# Icons für Leaflet erstellen (benannte Liste von makeIcon-Objekten)
+icon_names <- safe_name(map_data$Gemeinde)
+icon_paths <- sprintf("mini_plots/%s.png", icon_names)
+icon_list <- setNames(
+  lapply(icon_paths, function(path) makeIcon(iconUrl = path,
+                                             iconWidth = 240,
+                                             iconHeight = 240)),
+  icon_names)
+icon_set <- do.call(iconList, icon_list)
+map_data$icon_name <- icon_names
+
+# Karte mit individuellen Mini-Plot-Icons und Legende anzeigen
+leaflet(map_data) %>%
+  addTiles() %>%
+  setView(lng = mean(map_data$E),
+          lat = mean(map_data$N), zoom = 8) %>%
+  addMarkers(lng = ~E,
+             lat = ~N,
+             icon = ~icon_set[icon_name],
+             label = ~Gemeinde) %>%
+  addLegend(position = "bottomright",
+            pal = pal,
+            values = c(min_year, max_year),
+            title = "Jahr",
+            labFormat = labelFormat(big.mark = "",
+                                    transform = function(x) as.integer(x)),
+            opacity = 1  )
+
+
+
 ```
 
 # Visualization
