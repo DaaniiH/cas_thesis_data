@@ -156,7 +156,7 @@ lookup_parties_consolidated <- lookup_parties_consolidated_raw %>%
   distinct(party_orig_value, .keep_all = TRUE)
 ```
 
-### Parteilandschaft - Daten laden
+#### Partei Ratings laden
 
 ```{r}
 #| label: load_parties_rating
@@ -166,6 +166,18 @@ parties_rating <- read_excel("data/parties_economic_socio-political_rating.xlsx"
 
 parties_rating_3d <- read_excel("data/parties_economic_socio-political_rating.xlsx",
                              sheet = "3d")
+```
+
+#### Geo-Koordinaten laden
+
+```{r}
+#| label: load_geo_data
+
+ortschaftenverzeichnis <- read_delim("data/geodata/AMTOVZ_CSV_WGS84.csv",
+                                     delim = ";",
+                                     escape_double = FALSE,
+                                     trim_ws = TRUE) 
+
 ```
 
 ## Wahlen - Daten laden & Umformen
@@ -2671,7 +2683,7 @@ print(summary_df)
 
 
 exp(coef(step_state))  # Odds Ratios
-view(exp(coef(step_state)))
+print(exp(coef(step_state)))
 summary(step_state)    # p-Werte und Interpretation
 
 
@@ -2685,6 +2697,8 @@ exp(coef(step_parliament))  # Odds Ratios
 summary(step_parliament)    # p-Werte und Interpretation
 
 ```
+
+# Visualisierungen
 
 ## Parteilandschaft Schweiz
 
@@ -2924,7 +2938,7 @@ fig <- plot_ly(data = parties_rating_3d,
 fig
 ```
 
-### Tables Parties Rating
+#### Tables Parties Rating
 
 ```{r}
 
@@ -2969,24 +2983,15 @@ doc <- body_add_flextable(doc,
 # Speichern 
 print(doc, target = "result/Parties_Rating.docx")
 
-
-
 print(parties_rating)
 ```
 
-#### Politische Ausrichtung je Gemeinde bzw. "statistische Städte")
+### Zwei-Achsen-Modell je statistischer Stadt auf der Landkarte
 
-ACHTUNG: Vergleichsweise "Rechen- und Speicherplatzintensiv".
-
-Darstellung des Zwei-Achsen-Modells je statistischer Stadt auf der Landkarte
+**ACHTUNG: Vergleichsweise "Rechen- und Speicherplatzintensiv"**
 
 ```{r}
-
-ortschaftenverzeichnis <- read_delim("data/geodata/AMTOVZ_CSV_WGS84.csv",
-                                     delim = ";",
-                                     escape_double = FALSE,
-                                     trim_ws = TRUE) 
-
+#| label: load_gemeinde_lvl_party
 
 # Datensätze ("Parteien/Mandate & Position in Parteilandschaft) zusammenführen
 elec_joined <- elec_gemeinde_lvl_gemeinde %>%
@@ -2995,7 +3000,7 @@ elec_joined <- elec_gemeinde_lvl_gemeinde %>%
                                       socio_y),
             by = c("Partei" = "Partei"))
 
-# Gewichtung nach Parteistärke je Gemeinde um jeweils einen Punkt im Koordinatensystem zu erhalten
+# Punkt im Koordinatensysem - Gewichtung nach Parteistärke je Gemeinde
 elec_joined_weighted <- elec_joined %>%
   mutate(eco_weighted = n_seats_pct * eco_x,
          socio_weighted = n_seats_pct * socio_y) %>%
@@ -3007,6 +3012,7 @@ elec_joined_weighted <- elec_joined %>%
   ungroup()
 
 # Koordinaten hinzufügen
+# Gemeindeschreibweisen ggfs. korrigieren.
 elec_joined_weighted_with_coords <- elec_joined_weighted %>%
   mutate(Gemeinde = case_when(
       Gemeinde == "Aesch (BL)"        ~ "Aesch BL",
@@ -3055,12 +3061,30 @@ print(gemeinden_ohne_coords_df)
 ```
 
 ```{r}
+#| label: create_miniplots_and_visualize_on_map
+
+#################################################################
+# Das ergzeugen von PNG Dateien ist ein nötig, weil jeden Punkt #
+# der Leaflet-Karte ein individuelles Minidiagramm (Miniplot)   #
+# als Marker angezeigt bekommen soll. Leaflet kann aber keine   #
+# ggplot2-Objekte oder R-Plots direkt als Marker darstellen,    #
+# sonder akzeptiert nur Bilddateien als Icons für Marker.       #
+#################################################################
+
+#################################################################
+# Miniplots nur bei Bedarf neu erzeugen                         #
+# e.g. Aufgrund Änderung der Datengrundlage/Formatierung        #
+# TRUE = neu erzeugen, FALSE = vorhandene PNGs verwenden        #
+#################################################################
+
+generate_miniplots <- FALSE                          
+
+
 
 # Daten vorbereiten
 map_data <- elec_joined_weighted_with_coords %>%
-  filter(!is.na(E),
-         !is.na(N))
-  #       Gemeinde %in% c("Winterthur", "Zürich"))
+  filter(!is.na(E), !is.na(N))
+  #        Gemeinde %in% c("Winterthur", "Zürich"))
 
 # Hilfsfunktion für Dateinamen (keine Sonderzeichen)
 safe_name <- function(x) gsub("[^A-Za-z0-9]", "_", x)
@@ -3070,54 +3094,59 @@ all_years <- sort(unique(elec_joined_weighted_with_coords$year))
 min_year <- min(all_years)
 max_year <- max(all_years)
 pal <- colorNumeric(palette = colorRampPalette(c("grey80", "navy"))(256),
-                    domain = c(min_year, max_year))
+                    domain = c(min_year,
+                               max_year))
 
 # Mini-Plots als PNG erzeugen (mit halbtransparenter weißer Fläche)
-dir.create("mini_plots",
-           showWarnings = FALSE)
-pb <- txtProgressBar(min = 0,
-                     max = nrow(map_data),
-                     style = 3)
+if (generate_miniplots) {
+  dir.create("mini_plots", showWarnings = FALSE)
+  
+  pb <- txtProgressBar(min = 0,
+                       max = nrow(map_data),
+                       style = 3)
+  
+  for (i in seq_len(nrow(map_data))) {
+    # Alle Jahre für diese Gemeinde auswählen
+    df_gemeinde <- elec_joined_weighted_with_coords %>%
+      filter(Gemeinde == map_data$Gemeinde[i],
+             !is.na(eco),
+             !is.na(socio),
+             !is.na(year))
 
-for (i in seq_len(nrow(map_data))) {
-  # Alle Jahre für diese Gemeinde auswählen
-  df_gemeinde <- elec_joined_weighted_with_coords %>%
-    filter(Gemeinde == map_data$Gemeinde[i],
-           !is.na(eco),
-           !is.na(socio),
-           !is.na(year))
-
-  g <- ggplot(df_gemeinde,
-              aes(x = eco, y = socio, color = year)) +
-    geom_point(size = 12) +
-    geom_vline(xintercept = 50, linetype = "dashed", color = "blue", size = 2) +
-    geom_hline(yintercept = 50, linetype = "dashed", color = "blue", size = 2) +
-    scale_x_continuous(limits = c(0, 100), expand = c(0,0),
-                       labels = function(x) paste0(x, "%")) +
-    scale_y_continuous(limits = c(0, 100), expand = c(0,0),
-                       labels = function(x) paste0(x, "%")) +
-    scale_color_gradient(low = "grey80", high = "navy",
-                         name = "Jahr",
-                         limits = c(min_year, max_year)) +
-    labs(x = "Wirtschaftspolitisch",
-         y = "Gesellschaftspolitisch") +
-    theme_minimal(base_size = 28) +
-    theme(panel.background = element_rect(fill = rgb(1, 1, 1, 0.1),
-                                          color = NA),  # 10 % transparent weiss
-          plot.background = element_rect(fill = "transparent", color = NA),
-          axis.title = element_text(size = 48),
-          axis.text = element_text(size = 28),
-          axis.line = element_line(size = 2),
-          legend.position = "none",  # Legende AUS
-          panel.grid = element_blank(),
-          plot.margin = margin(8, 8, 8, 8, "pt"))
-  ggsave(filename = sprintf("mini_plots/%s.png",
-                            safe_name(map_data$Gemeinde[i])),
-         plot = g,
-         width = 10, height = 10,
-         units = "in", bg = "transparent", dpi = 540)
-  setTxtProgressBar(pb, i)}
-close(pb)
+    g <- ggplot(df_gemeinde,
+                aes(x = eco, y = socio, color = year)) +
+      geom_point(size = 12) +
+      geom_vline(xintercept = 50, linetype = "dashed", color = "blue", size = 2) +
+      geom_hline(yintercept = 50, linetype = "dashed", color = "blue", size = 2) +
+      scale_x_continuous(limits = c(0, 100), expand = c(0,5),
+                         labels = function(x) paste0(x, "%")) +
+      scale_y_continuous(limits = c(0, 100), expand = c(0,5),
+                         labels = function(x) paste0(x, "%")) +
+      scale_color_gradient(low = "grey80", high = "navy",
+                           name = "Jahr",
+                           limits = c(min_year, max_year)) +
+      labs(x = "Wirtschaftspolitisch",
+           y = "Gesellschaftspolitisch") +
+      theme_minimal(base_size = 28) +
+      theme(
+        panel.background = element_rect(fill = rgb(1, 1, 1, 0.1),
+                                        color = NA),  # 10 % transparent weiss
+        plot.background = element_rect(fill = "transparent",
+                                       color = NA),
+        axis.title = element_text(size = 40),
+        axis.text = element_text(size = 28),
+        axis.line = element_line(size = 2),
+        legend.position = "none",                      # Legende AUS
+        panel.grid = element_blank(),
+        plot.margin = margin(8, 8, 8, 8, "pt"))
+    
+    ggsave(filename = sprintf("mini_plots/%s.png",
+                              safe_name(map_data$Gemeinde[i])),
+           plot = g,
+           width = 9, height = 9,
+           units = "in", bg = "transparent", dpi = 150)
+    setTxtProgressBar(pb, i)}
+  close(pb)}
 
 # Icons für Leaflet erstellen (benannte Liste von makeIcon-Objekten)
 icon_names <- safe_name(map_data$Gemeinde)
@@ -3133,8 +3162,9 @@ map_data$icon_name <- icon_names
 # Karte mit individuellen Mini-Plot-Icons und Legende anzeigen
 leaflet(map_data) %>%
   addTiles() %>%
-  setView(lng = mean(map_data$E),
-          lat = mean(map_data$N), zoom = 8) %>%
+  # Fokus auf HWZ Zürich :-)
+  setView(lng = 8.5328, lat = 47.3781, zoom = 13) %>%
+  # setView(lng = mean(map_data$E), lat = mean(map_data$N), zoom = 8) %>%
   addMarkers(lng = ~E,
              lat = ~N,
              icon = ~icon_set[icon_name],
@@ -3145,13 +3175,12 @@ leaflet(map_data) %>%
             title = "Jahr",
             labFormat = labelFormat(big.mark = "",
                                     transform = function(x) as.integer(x)),
-            opacity = 1  )
-
-
-
+            opacity = 1)
 ```
 
-# Visualization
+## Abstimmungen
+
+### Daten
 
 ```{r}
 
@@ -3216,7 +3245,7 @@ ggplot(plot_data,
 
 ```
 
-#### Tatsächliches Ergebnis und Verteilung der Parolen (Ja-Nein-Keine)
+### Tatsächliches Ergebnis und Verteilung der Parolen (Ja-Nein-Keine) pro Jahr
 
 ```{r}
 
