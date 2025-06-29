@@ -71,18 +71,15 @@ library(dplyr)    # am Schluss laden, u.a. select() greift sonst aufs falsche
 ```{r}
 #| label: load_functions
 
-
-### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###  
+################################################  
 # Duplikate in df finden & als $unique oder $duplicates selektionierbar machen
 find_and_remove_duplicates <- function(df) {
   list(
     unique = df[!duplicated(df), ],
-    duplicates = df[duplicated(df) | duplicated(df, fromLast = TRUE), ]
-  )
-}
+    duplicates = df[duplicated(df) | duplicated(df, fromLast = TRUE), ])}
 
 
-### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###  
+################################################  
 # Aktive National- & Ständeräte identifizieren und selektionierbar machen
 
 filter_active <- function(data, von, bis) {
@@ -92,9 +89,7 @@ filter_active <- function(data, von, bis) {
     filter(
       DateJoining <= bis,                      # Eintritt vor/am Ende d. Zeitraums
       is.na(DateLeaving) | DateLeaving >= von  # Kein Austritt/nach Beginn des Z..
-    )
-}
-
+    )}
 ```
 
 # **ETL: Extract, Transform, Load**
@@ -170,6 +165,9 @@ lookup_parties_consolidated <- lookup_parties_consolidated_raw %>%
 
 parties_rating <- read_excel("data/parties_economic_socio-political_rating.xlsx",
                              sheet = "matrix_eco-socio_enhanced")
+
+parties_rating_3d <- read_excel("data/parties_economic_socio-political_rating.xlsx",
+                             sheet = "3d")
 ```
 
 ## Wahlen - Daten laden & Umformen
@@ -235,7 +233,6 @@ colnames(elec_nationalrat) <- gsub(" \\d+$",
                                    colnames(elec_nationalrat))
 make.unique(colnames(elec_nationalrat))
 
-
 make.unique(colnames(elec_ständerat))
 colnames(elec_ständerat) <- gsub(" \\d+$",
                                  "",
@@ -295,25 +292,17 @@ elec_nr_sr_combined <- elec_nr_sr_combined_long %>%
 ```{r}
 #| label: output_parliament
 
-
 # Ratssitze pro Jahr
 elec_nr_sr_combined_sum_check <- elec_nr_sr_combined %>%
   group_by(year, role) %>%
   summarise(total_n_seats = sum(n_seats,
                                 na.rm = TRUE),
     .groups = "drop") %>%
-  print(n=Inf)
+  print()
 
 
 # National- und Ständratssitze pro Partei und Jahr
-elec_nr_sr_combined
-
-
-#TODO: Clean-up evt. einmal nach ganzem load.
-# Clean-up: Nicht mehr benötigte "election" Tabellen löschen
- rm(list = ls(pattern = "^elec_")[       # Objekte die mit elec_ starten aber nicht
-   !grepl("(_combined|_combined_sum_check)$", # auf all_combined oder all_final enden
-          ls(pattern = "^elec_"))])
+print(elec_nr_sr_combined)
 ```
 
 #### Parteinamen Bund (für Lookup-Tabelle)
@@ -348,7 +337,7 @@ lookup_input_nr_sr_parties_label  <- elec_nr_sr_combined %>%
          prefix,
          add_info,
          level,
-         source) %>% print(n=Inf)
+         source)
 
 # Output prüfen (unique/distinct)
 lookup_input_nr_sr_parties_label %>% distinct() %>% print(n = Inf)
@@ -423,8 +412,7 @@ import_election_data <- function(dateipfad, sheetname) {
       names_to = "Partei",
       values_to = "Wert")
   
-  return(daten_long)
-}
+  return(daten_long)}
 ```
 
 #### Function ausführen & Konsolidation aus Datenliste
@@ -465,7 +453,6 @@ elec_canton_combined <- bind_rows(daten_liste,
 ```{r}
 #| label: output_canton
 
-
 # Ratssitze pro Jahr (nach-)prüfen
 elec_canton_combined_sum_check <- elec_canton_combined %>%
   group_by(year, role) %>%
@@ -474,25 +461,8 @@ elec_canton_combined_sum_check <- elec_canton_combined %>%
     .groups = "drop") %>%
   print(n=Inf)
 
-
 # National- und Ständratssitze pro Partei und Jahr
-elec_canton_combined
-
-
-#TODO: Clean-up evt. einmal nach ganzem load.
-# Clean-up: Nicht mehr benötigte "election" Tabellen löschen
- rm(list = ls(pattern = "^elec_")[       # Objekte die mit elec_ starten aber nicht
-   !grepl("(_combined|_combined_sum_check)$", # auf all_combined oder all_final enden
-          ls(pattern = "^elec_"))])
- 
-
-# datatable(elec_kantonale_regierung_combined,
-#           class = 'nowrap',
-#           filter = 'top',
-#           options = list(pageLength = 7,
-#                          scrollX = TRUE,
-#                          search = list(regex = TRUE,
-#                                        caseInsensitive = TRUE)))
+print(elec_canton_combined)
 ```
 
 #### Parteinamen Kanton (für Lookup-Tabelle)
@@ -614,8 +584,7 @@ importiere_sheet <- function(dateipfad, sheetname) {
              .direction = "down") %>%              # Cluster nach unten auffüllen
         filter(!is.na(suppressWarnings(
           as.numeric(gsub("'", "", `Kantons-Nr.`))))) # Herausfiltern von Zeilen                                                           mit NICHT-numerischem Wert
-    
-    
+
     # Ansicht (Snapshot) nach transponieren
     daten_wide[1:10,                    # 10 Zeilen
                c(1:10,                  # 10 Spalten +
@@ -635,8 +604,7 @@ importiere_sheet <- function(dateipfad, sheetname) {
                    names_pattern = "^(.*)_(Frauen|Männer|Total)$",# RegEx
                    values_to = "Wert")                            # Wert-Spalte
     
-    return(daten_long)
-}
+    return(daten_long)}
 ```
 
 #### Import der Dateien testen (optional)
@@ -660,8 +628,7 @@ for (sheet in selected_sheets) {
     cat("Fehler beim Einlesen von Sheet:", sheet, "\n")
     cat("Fehlermeldung:", e$message, "\n")
     FALSE
-  })
-}
+  })}
 ```
 
 #### Function ausführen & Konsolidation aus Datenliste
@@ -717,8 +684,7 @@ if (max_year < current_year) {
     last_year_data$year <- y
     last_year_data$election_year <- as.character(y)
     elec_gemeinde_combined <- bind_rows(elec_gemeinde_combined, last_year_data)
-  }
-}
+  }}
 ```
 
 #### Ergebnis Gemeinde bzw. Exekutiven statistischer Städte
@@ -731,17 +697,7 @@ elec_gemeinde_combined_sum_check <- elec_gemeinde_combined %>%
   group_by(year) %>%                         # Gruppieren nach Jahr
   summarise(summe = sum(n_seats, na.rm = TRUE)) # Summe berechnen, NAs ignorieren
 
-
-
-#TODO: Clean-up evt. einmal nach ganzem load.
-# Clean-up: Nicht mehr benötigte "election" Tabellen löschen
- rm(list = ls(pattern = "^elec_")[       # Objekte die mit elec_ starten aber nicht
-   !grepl("(_combined|_combined_sum_check)$", # auf all_combined oder all_final enden
-          ls(pattern = "^elec_"))])
-
-
-
-# TODO Grosses Datatable, deshalb auskommentieren oder ander Lösung..
+# Grosses Datatable, deshalb auskommentiert
 # datatable(elec_gemeinde_exekutiven_combined,
 #           class = 'nowrap',
 #           filter = 'top',
@@ -749,15 +705,12 @@ elec_gemeinde_combined_sum_check <- elec_gemeinde_combined %>%
 #                          scrollX = TRUE,
 #                          search = list(regex = TRUE,
 #                                        caseInsensitive = TRUE)))
-
-
 ```
 
 #### Parteinamen Gemeinde (für Lookup-Tabelle)
 
 ```{r}
 #| label: output_gemeinde_parties
-
 
 # Parteinamenvarianten
 unique(elec_gemeinde_combined$party_orig_value)
@@ -829,10 +782,10 @@ elec_all_combined <- bind_rows(elec_nr_sr_combined,
 ```{r}
 #| label: clean_up_election_df
 
-# Clean-up entfernt Objekte die mit "elec_" starten, ausser bei Endung auf
-# "_all_combined" oder "_all_final"
+
+# Clean-up: Nicht mehr benötigte "election" Tabellen löschen
  rm(list = ls(pattern = "^elec_")[       # Objekte die mit elec_ starten aber nicht
-   !grepl("(_all_combined|_all_final)$", # auf all_combined oder all_final enden
+   !grepl("(_all_final|_combined|_combined_sum_check)$", # auf all_combined oder all_final enden
           ls(pattern = "^elec_"))])
 ```
 
@@ -1070,8 +1023,7 @@ df_overview <- function(df_name) {
     cat("Erste 3 Zeilen:\n")
     print(head(df, 3))
   }
-  cat("\n\n")
-}
+  cat("\n\n")}
 ```
 
 #### df für Übersicht definieren und Function ausführen
@@ -1090,8 +1042,7 @@ df_names <- c("elec_gemeinde_lvl_gemeinde",
 
 # Übersicht für alle Dataframes erstellen
 for (name in df_names) {
-  df_overview(name)
-}
+  df_overview(name)}
 ```
 
 ## Abstimmungen - Daten laden & Umformen
@@ -1100,7 +1051,6 @@ for (name in df_names) {
 
 ```{r}
 #| label: load_voting
-
 
 # Ergbenisse der Schweizweite Abstimmungen laden
 voting_raw <- read_delim("data/abstimmungen_swissvotes_DATASET CSV 09-02-2025.csv",
@@ -1442,10 +1392,6 @@ voting_5y_long_strength_wtd_summary %>%
   arrange(desc(parole_sum))
 
 # write_xlsx(voting_5y_long_strength_wtd_summary, "tmp_voting_5y_long_strength_wtd_summary.xlsx")
-
-
-#TODO: Clean-up "voting" tabellen
-
 ```
 
 #### Spalten ergänzen (aus Urprungsfile)
@@ -1500,12 +1446,12 @@ voting_5y_final <- voting_5y_long_strength_wtd_summary %>%
 
 # Zeilenzahl prüfen
 nrow(voting_5y_final) == nrow(voting_5y_long_strength_wtd_summary)
-
 ```
 
 #### Spaltenklassifizierung und Levels
 
 ```{r}
+#| label: change_column_classification_and_add_levels
 
 str(voting_5y_final)
 
@@ -1553,6 +1499,7 @@ str(voting_5y_final)
 #### Spalten hinzufügen (berechnet)
 
 ```{r}
+#| label: add_columns
 
 # (Alle) Inserate-Anteile in Prozent
 voting_5y_final <- voting_5y_final %>%
@@ -1566,12 +1513,10 @@ voting_5y_final <- voting_5y_final %>%
 
 ```
 
-Function: "Klassenmutation" Codeblock schreiben
+##### Function: "Klassenmutation" Codeblock schreiben
 
 ```{r}
-    
-
-#df_name <- "voting_5y_final"
+#| label: load_function_to_build_mutate_code_block    
 
 # Funktion: Erzeugt den Mutate-Block
 generate_codeblock_4_type_conversion <- function(df, df_name = "df") {
@@ -1598,8 +1543,7 @@ generate_codeblock_4_type_conversion <- function(df, df_name = "df") {
     "  mutate(\n",
     paste(code_lines, collapse = ",\n"),
     "\n  )\n"
-  ))
-}
+  ))}
 
 # Function ausführen
 # df-Namen angeben für 1) Spaltenherkunft und 2) neues df im Codeblock
@@ -1615,8 +1559,8 @@ generate_codeblock_4_type_conversion(voting_5y_final,
 #### Data
 
 ```{r}
+#| label: paradox_cases
 
-#TODO: Umwandlung obsolet?!
 #relevante Spalten in numerisch umwandeln
 voting_5y_final <- voting_5y_final %>%
   mutate(annahme = as.numeric(annahme),
@@ -1678,8 +1622,6 @@ abgelehnt_ohne_nein_parole_50 <- abgelehnt %>%
          gemeinde_parole_Nein)
 
 print(abgelehnt_ohne_nein_parole_50)
-
-view(abgelehnt_ohne_nein_parole_50)
 ```
 
 ### Paradoxe Fälle
@@ -1687,14 +1629,11 @@ view(abgelehnt_ohne_nein_parole_50)
 Ob und wie stark die Parolen der Parteien (auf Staats-, Kantons- und Gemeindeebene) mit dem Abstimmungsausgang zusammenhängen – insbesondere in Fällen, wo die Ja-Parole unter 50 % liegt, die Vorlage aber trotzdem angenommen wird (und umgekehrt).
 
 ```{r}
-
+#| label: paradox_cases_2
+  
 # Fälle identifizieren: "Paradoxe" Abstimmungen
 # Annahme == 1, aber state_parole_Ja < 50 (und/oder die anderen Ebenen)
 # Annahme == 0, aber state_parole_Ja >= 50 (und/oder die anderen Ebenen)
-
-# Annahme als numerisch 
-#TODO: OBSOLET?
-voting_5y_final$annahme <- as.numeric(voting_5y_final$annahme)
 
 # Fälle identifizieren
 paradoxe_faelle <- voting_5y_final %>%
@@ -1705,12 +1644,12 @@ paradoxe_faelle <- voting_5y_final %>%
                               kt_parole_Ja >= 50 |
                               gemeinde_parole_Ja >= 50))) %>%
   select(anr, titel_kurz_d, annahme, state_parole_Ja, kt_parole_Ja, gemeinde_parole_Ja)
-
 ```
 
 #### Varianz
 
 ```{r}
+#| label: varianz
 
 # Abweichungen berechnen
 voting_5y_final <- voting_5y_final %>%
@@ -1754,12 +1693,13 @@ ggplot(summary_stats_v1,
        y = "Mittlere Abweichung (±1 SD, Prozentpunkte)") +
   guides(fill = "none")
 
-summary_stats_v1
+print(summary_stats_v1)
 ```
 
 #### Varianz gruppiert nach Rechtsform
 
 ```{r}
+#| label: varianz_nach_rechtsform
 
 # Abweichungen berechnen
 voting_5y_final <- voting_5y_final %>%
@@ -1798,7 +1738,7 @@ ggplot(summary_stats_v2, aes(x = Parole, y = mean, fill = Parole)) +
        y = "Mittlere Abweichung (±1 SD, Prozentpunkte)") +
   guides(fill = "none")
 
-summary_stats_v2
+print(summary_stats_v2)
 ```
 
 #### Prüfung der Normalverteilung
@@ -1806,6 +1746,7 @@ summary_stats_v2
 ##### Grafisch
 
 ```{r}
+#| label: normalverteilung
 
 # Nur die beiden großen Gruppen auswählen
 gruppen <- c("Fakultatives Referendum", "Volksinitiative")
@@ -1826,12 +1767,12 @@ ggplot(df_sub, aes(sample = diff_state)) +
   facet_wrap(~ rechtsform) +
   theme_minimal() +
   labs(title = "QQ-Plot der diff_state nach Rechtsform")
-
 ```
 
 ##### **Formale Prüfung (Shapiro-Wilk-Test)**
 
 ```{r}
+#| label: shapiro
 
 # Shapiro-Wilk-Test für jede Gruppe
 shapiro.test(df_sub$diff_state[df_sub$rechtsform == "Fakultatives Referendum"])
@@ -1842,12 +1783,12 @@ shapiro.test(df_sub$diff_kanton[df_sub$rechtsform == "Volksinitiative"])
 
 shapiro.test(df_sub$diff_gemeinde[df_sub$rechtsform == "Fakultatives Referendum"])
 shapiro.test(df_sub$diff_gemeinde[df_sub$rechtsform == "Volksinitiative"])
-
 ```
 
 ##### Ergebnisse Shapiro-Wilk-Test (tabellarisch)
 
 ```{r}
+#| label: shapiro_result
 
 # Ergebnisse in Liste schreiben
 results_shapiro <- tibble(Ebene = rep(c("Staat", "Kanton", "Gemeinde"),
@@ -1874,22 +1815,22 @@ results_shapiro <- tibble(Ebene = rep(c("Staat", "Kanton", "Gemeinde"),
 )
 
 print(results_shapiro)
-
 ```
 
 #### Prüfung der Varianzhomogenität (Levene-Test)
 
 ```{r}
+#| label: varianzhomogenität
 
 leveneTest(diff_state ~ rechtsform, data = df_sub)
 leveneTest(diff_kanton ~ rechtsform, data = df_sub)
 leveneTest(diff_gemeinde ~ rechtsform, data = df_sub)
-
 ```
 
 ##### Ergebnisse Levene-Test (Varianzhomogenität)
 
 ```{r}
+#| label: result_levene
 
 # Ergebnisse in Liste schreiben
 results_levene <- tibble(Ebene = c("Staat", 
@@ -1922,6 +1863,7 @@ print(results_levene)
 #### T-Test
 
 ```{r}
+#| label: t_test
 
 t.test(diff_state ~ rechtsform, data = df_sub, var.equal = TRUE)
 #t.test(diff_kanton ~ rechtsform, data = df_sub, var.equal = TRUE)
@@ -1932,7 +1874,7 @@ t.test(diff_gemeinde ~ rechtsform, data = df_sub, var.equal = TRUE)
 ##### Ergebnisse t-Test
 
 ```{r}
-
+#| label: result_t_test
 
 # Ergebnisse in Liste schreiben
 results_ttest <- tibble(Ebene = c("Staat",
@@ -1989,6 +1931,7 @@ print(results_ttest)
 #### Mann-Whitney-U-Test / Wilcox
 
 ```{r}
+#| label: mann_whitney_u_test_wilcox
 
 # Wilcoxon-Test durchführen
 wilcox_kanton <- wilcox.test(diff_kanton ~ rechtsform,
@@ -2005,6 +1948,7 @@ mediane <- df_sub %>%
 ##### Ergebnisse Mann-Whitney-U-Test / Wilcox
 
 ```{r}
+#| label: result_mann_whitney_u_test_wilcox
 
 # Ergebnisse als Liste schreiben
 results_wilcox <- tibble(Ebene = "Kanton",
@@ -2024,6 +1968,7 @@ view(results_wilcox)
 #### Tables Annahme & Ablehnung(Word)
 
 ```{r}
+#| label: function_table_annahme_ablehnung
 
 # Funktion für identische Formatierung
 format_table <- function(df) {
@@ -2070,6 +2015,7 @@ print(doc, target = "result/Annahme_Ablehnung.docx")
 #### Tables Varianz (Word)
 
 ```{r}
+#| label: function_table_varianz
 
 # Funktion für identische Formatierung
 format_table <- function(df) {
@@ -2112,11 +2058,10 @@ doc <- body_add_flextable(doc,
 print(doc, target = "result/Varianz.docx")
 ```
 
-#### Plots - ÜBERARBEITEN
+#### Plots 
 
 ```{r}
-
-#TODO
+#| label: full_view_annahme_ablehnung
 
 ##################################
 ##################################
@@ -2939,47 +2884,52 @@ ggplot(parties_rating,
                   clip = "off")
 ```
 
-### 3D-Koordinatensystem (Testweise)
+### 3D-Koordinatensystem
 
 ```{r}
 #| label: plot_parties_3d
 
 
-# Datenframe erstellen
-parties <- data.frame(
-  Partei = c("SP", "SVP", "FDP", "GPS", "GLP", "Mitte", "EVP", "EDU"),
-  Wirtschaft = c(20, 85, 80, 30, 60, 60, 40, 90),      # Links = niedrig, Rechts = hoch
-  Gesellschaft = c(90, 20, 55, 90, 75, 45, 50, 20),    # Libertär = hoch, Autoritär = niedrig
-  Kosmopolitismus = c(90, 15, 60, 95, 85, 50, 55, 20)  # Kosmopolitisch = hoch, Nationalistisch = niedrig
-)
+parties_rating_3d <- parties_rating_3d %>% 
+  mutate("Wirtschaft" = eco_pct_min_x,
+         "Gesellschaft" = socio_pct_min_x,
+         "Umwelt" = oeco_pct_min_x) %>%
+  select(-eco_pct_min_x, -socio_pct_min_x, -oeco_pct_min_x)
+
+
 
 # Interaktives 3D-Scatterplot mit Plotly
-fig <- plot_ly(
-  data = parties,
-  x = ~Wirtschaft,
-  y = ~Gesellschaft,
-  z = ~Kosmopolitismus,
-  text = ~Partei,
-  type = 'scatter3d',
-  mode = 'markers+text',
-  marker = list(size = 5),
-  textposition = 'top center'
-)
-
-# Achsen benennen und Layout anpassen
-fig <- fig %>% layout(
-  scene = list(
-    xaxis = list(title = "Wirtschaftspolitik (links – rechts)"),
-    yaxis = list(title = "Gesellschaftspolitik (autoritär – libertär)"),
-    zaxis = list(title = "Kosmopolitismus – Nationalismus")
-  ),
-  title = "Schweizer Parteien im 3D-Koordinatensystem nach Kitschelt"
-)
+# Achsen benennen und formatieren
+fig <- plot_ly(data = parties_rating_3d,
+               x = ~Wirtschaft,             # 100% = liberale Wirtschaftspolitik
+                                            #   0% = Interventionistisch
+               y = ~Gesellschaft,           # 100% = liberale Gesellschaftspolitik
+                                            #   0% = restriktive/konservativ
+               z = ~Umwelt,                 # 100% = ausgebauter Umweltschutz
+                                            #   0% = schwacher Umweltschutz
+               text = ~Partei,
+               type = 'scatter3d',
+               mode = 'markers+text',
+               marker = list(size = 6, color = "darkblue", opacity = 0.8),
+               textposition = 'top center') %>%
+  layout(title = list(text = "Schweizer Parteilandschaft im 3D-Modell",
+                      font = list(size = 18)),
+         scene = list(xaxis = list(title = "Wirtschaft (staatlich-liberal)",
+                                   range = c(0, 100)),
+                      yaxis = list(title = "Gesellschaft (konservativ-liberal)",
+                                   range = c(0, 100)),
+                      zaxis = list(title = "Umwelt (schwach-stark)",
+                                   range = c(0, 100))
+                      # camera = list(eye = list(x = 1.5,
+                      #                          y = 1.5,
+                      #                          z = 1.2))
+                      ),
+         margin = list(l = 0, r = 0, b = 0, t = 40),
+         paper_bgcolor = 'white',
+         plot_bgcolor = 'white')
 
 # Plot anzeigen
 fig
-
-
 ```
 
 ### Tables Parties Rating
@@ -3194,7 +3144,6 @@ ggplot() +
 ```
 
 ```{r}
-{r}
 
 ##DATUMSFILTER##
 jahr <- 2024
@@ -3267,7 +3216,6 @@ ggplot() +
 ```
 
 ```{r}
-{r}
 
 ##DATUMSFILTER##
 jahr <- 2023
@@ -3340,7 +3288,7 @@ ggplot() +
 ```
 
 ```{r}
-{r}
+
 
 ##DATUMSFILTER##
 jahr <- 2022
@@ -3413,7 +3361,7 @@ ggplot() +
 ```
 
 ```{r}
-{r}
+
 
 ##DATUMSFILTER##
 jahr <- 2021
@@ -3486,7 +3434,7 @@ ggplot() +
 ```
 
 ```{r}
-{r}
+
 
 ##DATUMSFILTER##
 jahr <- 2020
@@ -3559,7 +3507,7 @@ ggplot() +
 ```
 
 ```{r}
-{r}
+
 
 ##DATUMSFILTER##
 jahr <- 2019
